@@ -1,110 +1,129 @@
-module fir_filter (
-    // Parameters
+module fir #(
     parameter pADDR_WIDTH = 12,
     parameter pDATA_WIDTH = 32,
-    parameter Tap_Num = 11
-)(
-    // AXI Lite Write Interface
+    parameter Tape_Num = 11
+)
+(
+    // AXI-Stream interfaces
     output wire awready,
     output wire wready,
     input wire awvalid,
     input wire [(pADDR_WIDTH-1):0] awaddr,
     input wire wvalid,
     input wire [(pDATA_WIDTH-1):0] wdata,
-    
-    // AXI Lite Read Interface
     output wire arready,
     input wire rready,
     input wire arvalid,
     input wire [(pADDR_WIDTH-1):0] araddr,
     output wire rvalid,
     output wire [(pDATA_WIDTH-1):0] rdata,
-    
-    // AXI Stream Input Interface
+
+    // Custom AXI-Stream interfaces
     output wire ss_tvalid,
     input wire [(pDATA_WIDTH-1):0] ss_tdata,
     input wire ss_tlast,
     input wire ss_tready,
-    
-    // AXI Stream Output Interface
     input wire sm_tready,
     output wire sm_tvalid,
     output wire [(pDATA_WIDTH-1):0] sm_tdata,
     output wire sm_tlast,
-    
-    // Clock and Reset
+
+    // Clock and reset
     input wire axis_clk,
     input wire axis_rst_n
 );
+    // Internal signals and registers
+    reg [(pDATA_WIDTH-1):0] shift_reg [0:Tape_Num-1];
+    reg [(pDATA_WIDTH-1):0] tap_coefficients [0:Tape_Num-1];
+    reg [(pDATA_WIDTH-1):0] result;
+    reg [3:0] tap_index;
 
-    // Shift register and coefficient storage (SRAM-based)
-    reg [(pDATA_WIDTH-1):0] shift_register [0:Tap_Num-1];
-    reg [(pDATA_WIDTH-1):0] coefficients [0:Tap_Num-1];
-    
-    // Internal signals
-    wire [(pDATA_WIDTH-1):0] multiply_result;
-    wire [(pDATA_WIDTH-1):0] accumulate_result;
-    reg [pADDR_WIDTH-1:0] shift_reg_ptr;
-    reg [pDATA_WIDTH-1:0] output_data;
-    reg output_valid;
-
-    // Initialize shift register pointer and internal signals
-    initial begin
-        shift_reg_ptr = 0;
-        output_data = 0;
-        output_valid = 0;
-    end
-
-    // Load coefficients using AXI Lite write interface
-    always @(posedge axis_clk or negedge axis_rst_n) begin
-        if (!axis_rst_n) begin
-            // Reset logic
-            // Initialize or reset any required signals and registers
-        end else if (awvalid && awready) begin
-            // Write logic for coefficient loading
-            coefficients[awaddr] <= wdata;
-        end
-    end
-
-    // FIR filter logic
-    always @(posedge axis_clk or negedge axis_rst_n) begin
-        if (!axis_rst_n) begin
-            // Reset logic
-            // Initialize or reset any required signals and registers
-        end else if (ss_tvalid && ss_tready) begin
-            // Shift data into the shift register
-            shift_register[0] <= ss_tdata;
-            for (i = 1; i < Tap_Num; i = i + 1) begin
-                shift_register[i] <= shift_register[i-1];
-            end
-
-            // Multiply and accumulate
-            multiply_result = 0;
-            for (i = 0; i < Tap_Num; i = i + 1) begin
-                multiply_result = multiply_result + (shift_register[i] * coefficients[i]);
-            end
-            accumulate_result = multiply_result;
-
-            // Output data
-            output_data <= accumulate_result;
-            output_valid <= ss_tlast;
-        end
-    end
-
-    // AXI Stream Output Interface
-    assign sm_tvalid = output_valid;
-    assign sm_tdata = output_data;
+    // AXI-Stream to internal signals
+    reg internal_valid;
+    wire internal_ready;
+    assign internal_ready = (sm_tready && rready);
+    assign ss_tvalid = internal_valid && internal_ready;
+    assign sm_tvalid = internal_valid && internal_ready;
+    assign sm_tdata = result;
     assign sm_tlast = ss_tlast;
 
-    // AXI Stream Input Interface
-    assign ss_tready = 1; // Always ready to accept input
+    // AXI-Lite interface
+    reg [31:0] axilite_data;
+    reg [pADDR_WIDTH-1:0] axilite_addr;
+    reg axilite_write;
+    reg axilite_read;
+    reg [pDATA_WIDTH-1:0] axilite_read_data;
+    reg [pDATA_WIDTH-1:0] axilite_coef_data;
+    
+    always @(posedge axis_clk or negedge axis_rst_n) begin
+        if (!axis_rst_n) begin
+            // Reset logic here
+            for (int i = 0; i < Tape_Num; i = i + 1) begin
+                shift_reg[i] <= 0;
+                tap_coefficients[i] <= 0;
+            end
+            result <= 0;
+            tap_index <= 0;
+            internal_valid <= 0;
+        end else if (internal_ready) begin
+            // Update shift_reg with new data
+            for (int i = Tape_Num-1; i > 0; i = i - 1) begin
+                shift_reg[i] <= shift_reg[i-1];
+            end
+            shift_reg[0] <= wdata;
+            
+            // Perform FIR filtering using shift_reg and tap_coefficients
+            result <= 0;
+            for (int i = 0; i < Tape_Num; i = i + 1) begin
+                result <= result + (shift_reg[i] * tap_coefficients[i]);
+            end
 
-    // AXI Lite Write Interface
-    assign awready = 1; // Always ready to accept writes
-    assign wready = 1;  // Always ready to accept writes
+            // Set the internal valid flag to indicate data is ready
+            internal_valid <= wvalid;
+        end
+    end
 
-    // AXI Lite Read Interface
-    assign arready = 1; // Always ready to accept reads
-    assign rvalid = 0;  // Not implementing read functionality here
+    // AXI-Lite interface logic for coefficient configuration
+    always @(posedge axis_clk or negedge axis_rst_n) begin
+        if (!axis_rst_n) begin
+            axilite_data <= 0;
+            axilite_addr <= 0;
+            axilite_write <= 0;
+            axilite_read <= 0;
+            axilite_read_data <= 0;
+            axilite_coef_data <= 0;
+        end else begin
+            // Read/Write logic for AXI-Lite interface
+            if (awvalid && awready) begin
+                axilite_addr <= awaddr;
+                axilite_data <= wdata;
+                axilite_write <= 1;
+            end
+            if (arvalid && arready) begin
+                if (axilite_addr == pADDR_COEFF_BASE) begin
+                    axilite_read_data <= axilite_coef_data;
+                end
+                axilite_read <= 1;
+            end
+        end
+    end
 
+    always @(posedge axis_clk) begin
+        // Update tap_coefficients from AXI-Lite writes
+        if (axilite_write) begin
+            tap_coefficients[axilite_addr] <= axilite_data;
+            axilite_coef_data <= axilite_data;
+        end
+        // Reset axilite_write
+        axilite_write <= 0;
+    end
+
+    always @(posedge axis_clk) begin
+        // Respond to AXI-Lite reads
+        if (axilite_read) begin
+            axilite_read_data <= tap_coefficients[axilite_addr];
+        end
+        // Reset axilite_read
+        axilite_read <= 0;
+    end
 endmodule
