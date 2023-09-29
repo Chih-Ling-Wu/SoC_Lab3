@@ -7,6 +7,7 @@ module fir
     parameter Tape_Num = 11
 )
 (
+    // Original Input/Output Ports
     output wire awready,
     output wire wready,
     input wire awvalid,
@@ -35,6 +36,7 @@ module fir
     reg [(pDATA_WIDTH-1):0] tap_coefficients [0:Tape_Num-1];
     reg [(pDATA_WIDTH-1):0] result;
     reg [3:0] tap_index;
+    reg internal_valid;
 
     // Address map
     localparam pADDR_START = 8'h00;
@@ -44,12 +46,8 @@ module fir
     localparam pADDR_TAP_BASE = 8'h20;
 
     // AXI-Stream to internal signals
-    reg internal_valid;
     wire internal_ready;
-    assign internal_ready = (sm_tready && rready);
-    assign sm_tvalid = internal_valid && internal_ready;
-    assign sm_tdata = result;
-    assign sm_tlast = ss_tlast;
+    assign internal_ready = (ss_tready); // Adjust this based on your actual logic.
 
     // AXI-Lite interface signals
     reg [31:0] axilite_data;
@@ -58,7 +56,8 @@ module fir
     reg axilite_read;
     reg [pDATA_WIDTH-1:0] axilite_read_data;
     reg [pDATA_WIDTH-1:0] axilite_coef_data;
-    reg i ;
+
+    // AXI-Stream processing logic
     always @(posedge axis_clk or negedge axis_rst_n) begin
         if (!axis_rst_n) begin
             // Reset logic here
