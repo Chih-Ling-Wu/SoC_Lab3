@@ -62,7 +62,7 @@ module fir
             result <= 0;
             tap_index <= 0;
             internal_valid <= 0;
-        end else if (ss_tready) begin
+        end else if (sm_tready) begin
             // Update shift_reg with new data
             for (i = Tape_Num-1; i > 0; i = i - 1) begin
                 shift_reg[i] <= shift_reg[i-1];
