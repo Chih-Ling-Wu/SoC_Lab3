@@ -66,17 +66,17 @@ module fir #(
     assign sm_tlast = ss_tlast;
 
     // AXI-Lite interface
-    reg [31:0] axilite_data;
-    reg [pADDR_WIDTH-1:0] axilite_addr;
-    reg axilite_write;
-    reg axilite_read;
-    reg [pDATA_WIDTH-1:0] axilite_read_data;
-    reg [pDATA_WIDTH-1:0] axilite_coef_data;
+    reg [31:0] axi_lite_data;
+    reg [pADDR_WIDTH-1:0] axi_lite_addr;
+    reg axi_lite_write;
+    reg axi_lite_read;
+    reg [pDATA_WIDTH-1:0] axi_lite_read_data;
+    reg [pDATA_WIDTH-1:0] axi_lite_coef_data;
     
     always @(posedge axis_clk or negedge axis_rst_n) begin
         if (!axis_rst_n) begin
             // Reset logic here
-            for (int i = 0; i < Tape_Num; i = i + 1) begin
+            for (reg i = 0; i < Tape_Num; i = i + 1) begin
                 shift_reg[i] <= 0;
                 tap_coefficients[i] <= 0;
             end
@@ -85,14 +85,14 @@ module fir #(
             internal_valid <= 0;
         end else if (internal_ready) begin
             // Update shift_reg with new data
-            for (int i = Tape_Num-1; i > 0; i = i - 1) begin
+            for (reg i = Tape_Num-1; i > 0; i = i - 1) begin
                 shift_reg[i] <= shift_reg[i-1];
             end
             shift_reg[0] <= wdata;
             
             // Perform FIR filtering using shift_reg and tap_coefficients
             result <= 0;
-            for (int i = 0; i < Tape_Num; i = i + 1) begin
+            for (reg i = 0; i < Tape_Num; i = i + 1) begin
                 result <= result + (shift_reg[i] * tap_coefficients[i]);
             end
 
