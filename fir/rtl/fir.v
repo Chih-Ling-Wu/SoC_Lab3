@@ -7,27 +7,32 @@ module fir
     parameter Tape_Num = 11
 )
 (
-    // Original Input/Output Ports
-    output wire awready,
-    output wire wready,
-    input wire awvalid,
-    input wire [(pADDR_WIDTH-1):0] awaddr,
-    input wire wvalid,
-    input wire [(pDATA_WIDTH-1):0] wdata,
-    output wire arready,
-    input wire rready,
-    input wire arvalid,
-    input wire [(pADDR_WIDTH-1):0] araddr,
-    output wire rvalid,
-    output wire [(pDATA_WIDTH-1):0] rdata,
+    // AXI-Stream Input Ports
     input wire ss_tvalid,
     input wire [(pDATA_WIDTH-1):0] ss_tdata,
     input wire ss_tlast,
     output wire ss_tready,
-    input wire sm_tready,
+
+    // AXI-Stream Output Ports
     output wire sm_tvalid,
     output wire [(pDATA_WIDTH-1):0] sm_tdata,
     output wire sm_tlast,
+
+    // AXI-Lite Ports
+    input wire awvalid,
+    input wire [(pADDR_WIDTH-1):0] awaddr,
+    input wire wvalid,
+    input wire [(pDATA_WIDTH-1):0] wdata,
+    output wire awready,
+    output wire wready,
+    input wire arvalid,
+    input wire [(pADDR_WIDTH-1):0] araddr,
+    input wire rready,
+    output wire arready,
+    output wire rvalid,
+    output wire [(pDATA_WIDTH-1):0] rdata,
+
+    // Clock and Reset
     input wire axis_clk,
     input wire axis_rst_n
 );
@@ -45,18 +50,6 @@ module fir
     localparam pADDR_DATA_LENGTH = 8'h10;
     localparam pADDR_TAP_BASE = 8'h20;
 
-    // AXI-Stream to internal signals
-    wire internal_ready;
-    assign internal_ready = (ss_tready); // Adjust this based on your actual logic.
-
-    // AXI-Lite interface signals
-    reg [31:0] axilite_data;
-    reg [pADDR_WIDTH-1:0] axilite_addr;
-    reg axilite_write;
-    reg axilite_read;
-    reg [pDATA_WIDTH-1:0] axilite_read_data;
-    reg [pDATA_WIDTH-1:0] axilite_coef_data;
-
     // AXI-Stream processing logic
     always @(posedge axis_clk or negedge axis_rst_n) begin
         if (!axis_rst_n) begin
@@ -68,7 +61,7 @@ module fir
             result <= 0;
             tap_index <= 0;
             internal_valid <= 0;
-        end else if (internal_ready) begin
+        end else if (ss_tready) begin
             // Update shift_reg with new data
             for (i = Tape_Num-1; i > 0; i = i - 1) begin
                 shift_reg[i] <= shift_reg[i-1];
@@ -82,46 +75,43 @@ module fir
             end
 
             // Set the internal valid flag to indicate data is ready
-            internal_valid <= wvalid;
+            internal_valid <= ss_tvalid;
         end
     end
+
+    // AXI-Stream Output Interface
+    assign sm_tvalid = internal_valid;
+    assign sm_tdata = result;
+    assign sm_tlast = ss_tlast;
+
+    // AXI-Stream Input Interface
+    assign ss_tready = wready;
 
     // AXI-Lite interface logic for coefficient configuration
     always @(posedge axis_clk or negedge axis_rst_n) begin
         if (!axis_rst_n) begin
-            axilite_data <= 0;
-            axilite_addr <= 0;
-            axilite_write <= 0;
-            axilite_read <= 0;
-            axilite_read_data <= 0;
-            axilite_coef_data <= 0;
+            // Reset AXI-Lite logic here
+            awready <= 0;
+            wready <= 0;
+            arready <= 0;
+            rvalid <= 0;
+            // Reset other registers as needed
+            // ...
         end else begin
             // Read/Write logic for AXI-Lite interface
             if (awvalid && awready) begin
-                axilite_addr <= awaddr;
-                axilite_data <= wdata;
-                axilite_write <= 1;
+                case(awaddr)
+                    pADDR_TAP_BASE: tap_coefficients[awaddr - pADDR_TAP_BASE] <= wdata;
+                    default: // Handle other addresses if needed
+                endcase
             end
             if (arvalid && arready) begin
-                case(axilite_addr)
-                    pADDR_TAP_BASE: axilite_read_data <= tap_coefficients[araddr];
-                    default: axilite_read_data <= 0;
+                case(araddr)
+                    pADDR_TAP_BASE: rdata <= tap_coefficients[araddr - pADDR_TAP_BASE];
+                    default: // Handle other addresses if needed
                 endcase
-                axilite_read <= 1;
+                rvalid <= 1;
             end
         end
     end
-
-    always @(posedge axis_clk) begin
-        // Update tap_coefficients from AXI-Lite writes
-        if (axilite_write) begin
-            if (axilite_addr >= pADDR_TAP_BASE) begin
-                tap_coefficients[axilite_addr - pADDR_TAP_BASE] <= axilite_data;
-            end
-            axilite_coef_data <= axilite_data;
-        end
-        // Reset axilite_write
-        axilite_write <= 0;
-    end
-
 endmodule
