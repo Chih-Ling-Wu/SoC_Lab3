@@ -11,12 +11,13 @@ module fir
     input wire ss_tvalid,
     input wire [(pDATA_WIDTH-1):0] ss_tdata,
     input wire ss_tlast,
-    output wire ss_tready,
+    input wire sm_tready,
 
     // AXI-Stream Output Ports
     output wire sm_tvalid,
     output wire [(pDATA_WIDTH-1):0] sm_tdata,
     output wire sm_tlast,
+    output wire ss_tready,
 
     // AXI-Lite Ports
     input wire awvalid,
