@@ -1,5 +1,6 @@
 module fir
 #(
+    parameter pADDR_WIDTH = 12,
     parameter pDATA_WIDTH = 32,
     parameter Tape_Num    = 11
 )
@@ -7,26 +8,29 @@ module fir
     output  wire                     awready,
     output  wire                     wready,
     input   wire                     awvalid,
+    input   wire [(pADDR_WIDTH-1):0] awaddr,
+    input   wire                     wvalid,
     input   wire [(pDATA_WIDTH-1):0] wdata,
     output  wire                     arready,
     input   wire                     rready,
     input   wire                     arvalid,
-    output  wire [(pDATA_WIDTH-1):0] rdata,
-    input   wire                     ss_tvalid,
-    input   wire [(pDATA_WIDTH-1):0] ss_tdata,
-    input   wire                     ss_tlast,
-    output  wire                     ss_tready,
-    input   wire                     sm_tready,
-    output  wire                     sm_tvalid,
-    output  wire [(pDATA_WIDTH-1):0] sm_tdata,
-    output  wire                     sm_tlast,
+    input   wire [(pADDR_WIDTH-1):0] araddr,
+    output  wire                     rvalid,
+    output  wire [(pDATA_WIDTH-1):0] rdata,    
+    input   wire                     ss_tvalid, 
+    input   wire [(pDATA_WIDTH-1):0] ss_tdata, 
+    input   wire                     ss_tlast, 
+    output  wire                     ss_tready, 
+    input   wire                     sm_tready, 
+    output  wire                     sm_tvalid, 
+    output  wire [(pDATA_WIDTH-1):0] sm_tdata, 
+    output  wire                     sm_tlast, 
     input   wire                     axis_clk,
     input   wire                     axis_rst_n
 );
-    // Define internal signals and registers here
-    reg signed [(pDATA_WIDTH-1):0] shift_reg [0:9]; // Size = 10 DW
-    reg signed [(pDATA_WIDTH-1):0] output_data;
-    reg [10:0] tap_coefficients [0:10]; // Tap_RAM = 11 DW
+    // Internal signals and registers
+    reg [(pDATA_WIDTH-1):0] shift_reg [0:10]; // Size = 11 DW
+    reg [(pDATA_WIDTH-1):0] output_data;
     reg [pADDR_WIDTH-1:0] tap_data_addr;
     reg [pDATA_WIDTH-1:0] tap_data;
     reg [pDATA_WIDTH-1:0] len;
@@ -34,16 +38,55 @@ module fir
     reg ap_done;
     reg ap_idle;
 
-    // Implement your FIR filter logic here
-    // Using one Multiplier and one Adder
+    // FIR filter coefficients
+    reg signed [(pDATA_WIDTH-1):0] tap_coefficients [0:10];
+
+    // Additional logic for sm_tvalid, sm_tdata, sm_tlast, and sm_tready
+    reg sm_tvalid;   // Valid signal for the output data
+    reg [(pDATA_WIDTH-1):0] sm_tdata; // Output data
+    reg sm_tlast;    // Last signal for the output data
+    wire sm_tready;  // Ready signal for the output data
+
+    // Define some internal signals to manage the streaming output
+    reg [2:0] output_state; // State machine for output streaming
 
     always @(posedge axis_clk or negedge axis_rst_n) begin
         if (!axis_rst_n) begin
+            // Reset logic for the output streaming
+            output_state <= 3'b000;
+            sm_tvalid <= 0;
+            sm_tdata <= 0;
+            sm_tlast <= 0;
+        end else begin
+            // Handle the output streaming
+            case(output_state)
+                3'b000: begin
+                    // Idle state
+                    if (ss_tvalid) begin
+                        output_state <= 3'b001; // Move to the first data state
+                        sm_tvalid <= 1; // Indicate that data is valid
+                        sm_tdata <= ss_tdata; // Output the data
+                        sm_tlast <= ss_tlast; // Output the last signal
+                    end
+                end
+
+                3'b001: begin
+                    // Data state
+                    if (sm_tready) begin
+                        output_state <= 3'b000; // Go back to idle state
+                        sm_tvalid <= 0; // Indicate that data is not valid
+                    end
+                end
+            endcase
+        end
+    end
+
+    // FIR filter logic
+    always @(posedge axis_clk or negedge axis_rst_n) begin
+        if (!axis_rst_n) begin
             // Reset logic here (initialize registers, etc.)
-            for (int i = 0; i < 10; i = i + 1) begin
-                shift_reg[i] <= 0;
-            end
             for (int i = 0; i < 11; i = i + 1) begin
+                shift_reg[i] <= 0;
                 tap_coefficients[i] <= 0;
             end
             len <= 0;
@@ -51,8 +94,6 @@ module fir
             ap_done <= 0;
             ap_idle <= 0;
         end else begin
-            // FIR filter logic here
-
             // Handle data input (axi_stream to shift register)
             if (!ap_start && awvalid && awready) begin
                 ap_start <= awdata[0];
@@ -61,22 +102,22 @@ module fir
             if (ap_start) begin
                 if (awvalid && awready) begin
                     shift_reg[0] <= wdata;
-                    for (int i = 1; i < 10; i = i + 1) begin
+                    for (int i = 1; i < 11; i = i + 1) begin
                         shift_reg[i] <= shift_reg[i - 1];
                     end
                 end
 
-                // Calculate FIR output using one multiplier and one adder
+                // Calculate FIR output using multiplications and accumulation
                 output_data <= 0;
                 for (int i = 0; i < 11; i = i + 1) begin
                     output_data <= output_data + (shift_reg[i] * tap_coefficients[i]);
                 end
 
                 // Handle data output (axi_stream)
-                if (ss_tvalid && ss_tready) begin
+                if (sm_tvalid && sm_tready) begin
                     ss_tready <= 0;
                     ss_tdata <= output_data;
-                    ss_tlast <= ss_tlast;
+                    ss_tlast <= sm_tlast;
                 end
 
                 // Check for ap_done (when all data is processed)
@@ -109,4 +150,5 @@ module fir
             end
         end
     end
+
 endmodule
