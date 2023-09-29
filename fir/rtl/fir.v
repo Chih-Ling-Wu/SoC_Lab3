@@ -1,4 +1,4 @@
-module fir_filter (
+module fir (
     // AXI-Lite Control Interface
     output wire awready,
     output wire wready,
@@ -29,7 +29,7 @@ module fir_filter (
     input wire axis_clk,
     input wire axis_rst_n
 );
-    // Define internal signals and registers
+    // Internal signals and registers
     reg [31:0] shift_reg [10:0]; // Shift register implemented with SRAM (11 DW)
     reg [31:0] tap_coeff [10:0]; // Tap coefficients implemented with SRAM (11 DW)
     reg [31:0] accum;
@@ -58,29 +58,30 @@ module fir_filter (
     localparam ADDR_TAP_PARAMS_START = 12'h20;
     localparam ADDR_TAP_PARAMS_END = 12'hFF;
 
-    // Initialization
-    initial begin
-        // Initialize your shift register, tap coefficients, and control signals here.
-        // For example:
-        for (i = 0; i < 11; i = i + 1) begin
-            shift_reg[i] = 0;
-            tap_coeff[i] = 0;
+    // Synthesizable reset logic
+    always @(posedge axis_clk or negedge axis_rst_n) begin
+        if (!axis_rst_n) begin
+            // Reset your module's registers and state here
+            for (i = 0; i < 11; i = i + 1) begin
+                shift_reg[i] <= 0;
+                tap_coeff[i] <= 0;
+            end
+            accum <= 0;
+            output_data <= 0;
+            tap_ptr <= 0;
+            data_count <= 0;
+            coef_write_data <= 0;
+            coef_write_enable <= 0;
+            coef_write_addr <= 0;
+            coef_write_done <= 0;
+            ap_start_write_enable <= 0;
+            ap_done_write_data <= 0;
+            len_write_data <= 0;
+            len_write_enable <= 0;
+            len_read_data <= 0;
+            ap_start_read_data <= 0;
+            ap_start <= 0;
         end
-        accum = 0;
-        output_data = 0;
-        tap_ptr = 0;
-        data_count = 0;
-        coef_write_data = 0;
-        coef_write_enable = 0;
-        coef_write_addr = 0;
-        coef_write_done = 0;
-        ap_start_write_enable = 0;
-        ap_done_write_data = 0;
-        len_write_data = 0;
-        len_write_enable = 0;
-        len_read_data = 0;
-        ap_start_read_data = 0;
-        ap_start = 0;
     end
 
     // AXI-Lite Control Logic
@@ -122,12 +123,12 @@ module fir_filter (
         if (!axis_rst_n) begin
             // Reset shift register
             for (i = 0; i < 11; i = i + 1) begin
-                shift_reg[i] = 0;
+                shift_reg[i] <= 0;
             end
         end else if (ap_start) begin
             // Reset shift register on ap_start
             for (i = 0; i < 11; i = i + 1) begin
-                shift_reg[i] = 0;
+                shift_reg[i] <= 0;
             end
         end else if (ss_tvalid) begin
             // Shift in data when valid
@@ -144,72 +145,99 @@ module fir_filter (
             // Reset FIR filter
             accum <= 0;
             output_data <= 0;
+            tap_ptr <= 0;
+            data_count <= 0;
         end else if (ap_start) begin
             // Reset FIR filter on ap_start
             accum <= 0;
             output_data <= 0;
+            tap_ptr <= 0;
+            data_count <= 0;
         end else if (ss_tvalid) begin
-            // Compute FIR filter output
-            if (tap_wr_enable) begin
-                accum <= 0;
-            end else begin
-                accum <= accum + shift_reg[tap_ptr] * tap_coeff[tap_ptr];
+            // FIR filtering logic when data is valid
+            // Shift in data when valid
+            for (i = 10; i > 0; i = i - 1) begin
+                shift_reg[i] <= shift_reg[i - 1];
+            end
+            shift_reg[0] <= ss_tdata;
+
+            // Multiply and accumulate
+            accum <= accum + (shift_reg[0] * tap_coeff[tap_ptr]);
+            tap_ptr <= tap_ptr + 1;
+
+            // Output valid data when tap pointer reaches Tape_Num
+            if (tap_ptr == Tape_Num) begin
                 output_data <= accum;
-            end
-        end else if (ss_tready) begin
-            accum <= accum - shift_reg[tap_ptr] * tap_coeff[tap_ptr];
-            output_data <= accum;
-        end
-    end
-
-    // Output data to AXI-Stream interface
-    always @(posedge axis_clk or negedge axis_rst_n) begin
-        if (!axis_rst_n) begin
-            // Reset AXI-Stream signals
-        end else begin
-            // Output data to AXI-Stream
-            sm_tvalid <= (data_count < len_read_data);
-            sm_tdata <= output_data;
-            sm_tlast <= (data_count == len_read_data - 1);
-        end
-    end
-
-    // AXI-Stream input interface logic
-    always @(posedge axis_clk or negedge axis_rst_n) begin
-        if (!axis_rst_n) begin
-            // Reset AXI-Stream input signals
-            ss_tready <= 0;
-        end else if (ap_start) begin
-            // Reset AXI-Stream input on ap_start
-            ss_tready <= 0;
-        end else begin
-            // AXI-Stream input logic
-            ss_tready <= sm_tready;
-            if (ss_tvalid && ss_tready) begin
+                accum <= 0;
+                tap_ptr <= 0;
                 data_count <= data_count + 1;
-                if (data_count == len_read_data - 1) begin
-                    ap_done_write_data <= 1;
-                end
             end
         end
     end
 
-    // Implement your AXI-Stream output logic here based on the filtered data
-    // stored in the output_data register.
-    
-    // Output data to AXI-Stream interface
+    // AXI-Stream Output Logic
+    reg [0:11] sm_tdata_reg;    // Register for sm_tdata signal
+    reg sm_tlast_reg;           // Register for sm_tlast signal
+
+    // AXI-Stream output logic
     always @(posedge axis_clk or negedge axis_rst_n) begin
         if (!axis_rst_n) begin
-            // Reset AXI-Stream signals
-            sm_tvalid <= 0;
-            sm_tdata <= 0;
-            sm_tlast <= 0;
+            // Reset AXI-Stream output signals and registers
+            sm_tvalid_reg <= 0;
+            sm_tdata_reg <= 0;
+            sm_tlast_reg <= 0;
+        end else if (ap_start) begin
+            // Reset AXI-Stream output on ap_start
+            sm_tvalid_reg <= 0;
+            sm_tdata_reg <= 0;
+            sm_tlast_reg <= 0;
         end else begin
-            // Output data to AXI-Stream
-            sm_tvalid <= (data_count < len_read_data);
-            sm_tdata <= output_data;
-            sm_tlast <= (data_count == len_read_data - 1);
+            // Update output data register
+            sm_tvalid_reg <= (data_count < len_read_data);
+            sm_tdata_reg <= output_data;
+            sm_tlast_reg <= (data_count == len_read_data - 1);
         end
-end
+    end
 
+    // Drive the output signals with registered values
+    assign sm_tvalid = sm_tvalid_reg;
+    assign sm_tdata = sm_tdata_reg;
+    assign sm_tlast = sm_tlast_reg;
+
+    // Implement your tap coefficient write logic here
+    always @(posedge axis_clk or negedge axis_rst_n) begin
+        if (!axis_rst_n) begin
+            // Reset tap coefficient write logic
+        end else begin
+            if (coef_write_enable) begin
+                tap_coeff[coef_write_addr] <= coef_write_data;
+                coef_write_done <= 1;
+            end else begin
+                coef_write_done <= 0;
+            end
+        end
+    end
+
+    // Implement your data length write logic here
+    always @(posedge axis_clk or negedge axis_rst_n) begin
+        if (!axis_rst_n) begin
+            // Reset data length write logic
+        end else begin
+            if (len_write_enable) begin
+                len_read_data <= len_write_data;
+            end
+        end
+    end
+
+    // Implement your AXI-Lite read logic for ap_start here
+    always @(posedge axis_clk or negedge axis_rst_n) begin
+        if (!axis_rst_n) begin
+            // Reset AXI-Lite read logic for ap_start
+            ap_start_read_data <= 0;
+        end else begin
+            if (ap_start_write_enable) begin
+                ap_start_read_data <= ap_done_write_data;
+            end
+        end
+    end
 endmodule
