@@ -46,9 +46,8 @@ module fir
     localparam pADDR_TAP_BASE = 8'h20;
 
     // AXI-Stream to internal signals
-    assign sm_tvalid = internal_valid && ss_tready;
-    assign sm_tdata = result;
-    assign sm_tlast = ss_tlast;
+    wire internal_ready;
+    assign internal_ready = (ss_tready); // Adjust this based on your actual logic.
 
     // AXI-Lite interface signals
     reg [31:0] axilite_data;
@@ -69,7 +68,7 @@ module fir
             result <= 0;
             tap_index <= 0;
             internal_valid <= 0;
-        end else if (ss_tready) begin
+        end else if (internal_ready) begin
             // Update shift_reg with new data
             for (i = Tape_Num-1; i > 0; i = i - 1) begin
                 shift_reg[i] <= shift_reg[i-1];
