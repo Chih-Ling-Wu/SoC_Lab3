@@ -49,6 +49,7 @@ module fir_tb
     reg                         axis_clk;
     reg                         axis_rst_n;
 
+    reg error_coef;
     fir fir_DUT(
         .awready(awready),
         .wready(wready),
@@ -171,7 +172,7 @@ module fir_tb
         coef[10] =  32'd0;
     end
 
-    reg error_coef;
+    
     initial begin
         error_coef = 0;
         $display("----Start the coefficient input(AXI-lite)----");
