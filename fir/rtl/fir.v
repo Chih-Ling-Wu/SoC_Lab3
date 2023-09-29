@@ -1,33 +1,32 @@
-module fir (
-    // AXI-Lite Control Interface
-    output wire awready,
-    output wire wready,
-    input wire awvalid,
-    input wire [11:0] awaddr,
-    input wire wvalid,
-    input wire [31:0] wdata,
-    output wire arready,
-    input wire rready,
-    input wire arvalid,
-    input wire [11:0] araddr,
-    output wire rvalid,
-    output wire [31:0] rdata,
-
-    // AXI-Stream Input Interface
-    input wire ss_tvalid,
-    input wire [31:0] ss_tdata,
-    input wire ss_tlast,
-    output wire ss_tready,
-
-    // AXI-Stream Output Interface
-    input wire sm_tready,
-    output wire sm_tvalid,
-    output wire [31:0] sm_tdata,
-    output wire sm_tlast,
-
-    // Clock and Reset
-    input wire axis_clk,
-    input wire axis_rst_n
+`timescale 1ns / 1ps
+module fir 
+#(  parameter pADDR_WIDTH = 12,
+    parameter pDATA_WIDTH = 32,
+    parameter Tape_Num    = 11
+)
+(
+    output  wire                     awready,
+    output  wire                     wready,
+    input   wire                     awvalid,
+    input   wire [(pADDR_WIDTH-1):0] awaddr,
+    input   wire                     wvalid,
+    input   wire [(pDATA_WIDTH-1):0] wdata,
+    output  wire                     arready,
+    input   wire                     rready,
+    input   wire                     arvalid,
+    input   wire [(pADDR_WIDTH-1):0] araddr,
+    output  wire                     rvalid,
+    output  wire [(pDATA_WIDTH-1):0] rdata,    
+    input   wire                     ss_tvalid, 
+    input   wire [(pDATA_WIDTH-1):0] ss_tdata, 
+    input   wire                     ss_tlast, 
+    output  wire                     ss_tready, 
+    input   wire                     sm_tready, 
+    output  wire                     sm_tvalid, 
+    output  wire [(pDATA_WIDTH-1):0] sm_tdata, 
+    output  wire                     sm_tlast, 
+    input   wire                     axis_clk,
+    input   wire                     axis_rst_n
 );
     // Internal signals and registers
     reg [31:0] shift_reg [10:0]; // Shift register implemented with SRAM (11 DW)
@@ -37,7 +36,7 @@ module fir (
     reg [4:0] tap_ptr;
     reg [31:0] data_count;
     wire tap_wr_enable;
-    wire ap_start;
+    reg ap_start;
 
     // Internal AXI-Lite Control Registers
     reg [31:0] coef_write_data;
@@ -51,7 +50,8 @@ module fir (
     reg ap_start_write_enable;
     reg [31:0] ap_done_write_data;
     reg ap_done_write_enable;
-
+    reg i;
+    reg sm_tvalid_reg;
     // Address map constants
     localparam ADDR_AP_CTRL = 12'h00;
     localparam ADDR_DATA_LENGTH = 12'h10;
