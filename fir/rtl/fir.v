@@ -1,118 +1,97 @@
-`timescale 1ns / 1ps
-
 module fir
 #(
-    parameter pADDR_WIDTH = 12,
     parameter pDATA_WIDTH = 32,
-    parameter Tape_Num = 11
+    parameter Tape_Num    = 11
 )
 (
-    // AXI-Stream Input Ports
-    input wire ss_tvalid,
-    input wire [(pDATA_WIDTH-1):0] ss_tdata,
-    input wire ss_tlast,
-    input wire sm_tready,
-
-    // AXI-Stream Output Ports
-    output wire sm_tvalid,
-    output wire [(pDATA_WIDTH-1):0] sm_tdata,
-    output wire sm_tlast,
-    output wire ss_tready,
-
-    // AXI-Lite Ports
-    input wire awvalid,
-    input wire [(pADDR_WIDTH-1):0] awaddr,
-    input wire wvalid,
-    input wire [(pDATA_WIDTH-1):0] wdata,
-    output wire awready,
-    output wire wready,
-    input wire arvalid,
-    input wire [(pADDR_WIDTH-1):0] araddr,
-    input wire rready,
-    output wire arready,
-    output wire rvalid,
-    output wire [(pDATA_WIDTH-1):0] rdata,
-
-    // Clock and Reset
-    input wire axis_clk,
-    input wire axis_rst_n
+    output  wire                     awready,
+    output  wire                     wready,
+    input   wire                     awvalid,
+    input   wire [(pDATA_WIDTH-1):0] wdata,
+    output  wire                     arready,
+    input   wire                     rready,
+    input   wire                     arvalid,
+    output  wire [(pDATA_WIDTH-1):0] rdata,
+    input   wire                     ss_tvalid,
+    input   wire [(pDATA_WIDTH-1):0] ss_tdata,
+    input   wire                     ss_tlast,
+    output  wire                     ss_tready,
+    input   wire                     sm_tready,
+    output  wire                     sm_tvalid,
+    output  wire [(pDATA_WIDTH-1):0] sm_tdata,
+    output  wire                     sm_tlast,
+    input   wire                     axis_clk,
+    input   wire                     axis_rst_n
 );
-    // Internal signals and registers
-    reg [(pDATA_WIDTH-1):0] shift_reg [0:Tape_Num-1];
-    reg [(pDATA_WIDTH-1):0] tap_coefficients [0:Tape_Num-1];
-    reg [(pDATA_WIDTH-1):0] result;
-    reg [3:0] tap_index;
-    reg internal_valid;
+    // Define internal signals and registers here
+    reg signed [(pDATA_WIDTH-1):0] shift_reg [0:Tape_Num-1];
+    reg signed [(pDATA_WIDTH-1):0] output_data;
+    reg [pDATA_WIDTH-1:0] tap_coefficients [0:Tape_Num-1];
+    reg [pADDR_WIDTH-1:0] tap_data_addr;
+    reg [pDATA_WIDTH-1:0] tap_data;
+    reg [pDATA_WIDTH-1:0] len;
+    reg ap_start;
 
-    // Address map
-    localparam pADDR_START = 8'h00;
-    localparam pADDR_DONE = 8'h01;
-    localparam pADDR_IDLE = 8'h02;
-    localparam pADDR_DATA_LENGTH = 8'h10;
-    localparam pADDR_TAP_BASE = 8'h20;
-
-    // AXI-Stream processing logic
+    // Implement your FIR filter logic here
     always @(posedge axis_clk or negedge axis_rst_n) begin
         if (!axis_rst_n) begin
-            // Reset logic here
-            for (i = 0; i < Tape_Num; i = i + 1) begin
+            // Reset logic here (initialize registers, etc.)
+            for (int i = 0; i < Tape_Num; i = i + 1) begin
                 shift_reg[i] <= 0;
                 tap_coefficients[i] <= 0;
             end
-            result <= 0;
-            tap_index <= 0;
-            internal_valid <= 0;
-        end else if (sm_tready) begin
-            // Update shift_reg with new data
-            for (i = Tape_Num-1; i > 0; i = i - 1) begin
-                shift_reg[i] <= shift_reg[i-1];
-            end
-            shift_reg[0] <= ss_tdata;
-            
-            // Perform FIR filtering using shift_reg and tap_coefficients
-            result <= 0;
-            for (i = 0; i < Tape_Num; i = i + 1) begin
-                result <= result + (shift_reg[i] * tap_coefficients[i]);
-            end
-
-            // Set the internal valid flag to indicate data is ready
-            internal_valid <= ss_tvalid;
-        end
-    end
-
-    // AXI-Stream Output Interface
-    assign sm_tvalid = internal_valid;
-    assign sm_tdata = result;
-    assign sm_tlast = ss_tlast;
-
-    // AXI-Stream Input Interface
-    assign ss_tready = wready;
-
-    // AXI-Lite interface logic for coefficient configuration
-    always @(posedge axis_clk or negedge axis_rst_n) begin
-        if (!axis_rst_n) begin
-            // Reset AXI-Lite logic here
-            awready <= 0;
-            wready <= 0;
-            arready <= 0;
-            rvalid <= 0;
-            // Reset other registers as needed
-            // ...
+            len <= 0;
+            ap_start <= 0;
         end else begin
-            // Read/Write logic for AXI-Lite interface
-            if (awvalid && awready) begin
-                case(awaddr)
-                    pADDR_TAP_BASE: tap_coefficients[awaddr - pADDR_TAP_BASE] <= wdata;
-                    default: // Handle other addresses if needed
-                endcase
+            // FIR filter logic here
+
+            // Handle data input (axi_stream to shift register)
+            if (ap_start && awvalid && awready) begin
+                shift_reg[0] <= wdata;
+                for (int i = 1; i < Tape_Num; i = i + 1) begin
+                    shift_reg[i] <= shift_reg[i - 1];
+                end
             end
+
+            // Calculate FIR output
+            output_data <= 0;
+            for (int i = 0; i < Tape_Num; i = i + 1) begin
+                output_data <= output_data + (shift_reg[i] * tap_coefficients[i]);
+            end
+
+            // Handle data output (axi_stream)
+            if (ap_start && ss_tvalid && ss_tready) begin
+                ss_tready <= 0;
+                ss_tdata <= output_data;
+                ss_tlast <= ss_tlast;
+            end
+
+            // Handle tap coefficient read (axilite)
             if (arvalid && arready) begin
                 case(araddr)
-                    pADDR_TAP_BASE: rdata <= tap_coefficients[araddr - pADDR_TAP_BASE];
-                    default: // Handle other addresses if needed
+                    12'h20: rdata <= tap_coefficients[araddr[4:0]];
+                    12'h10: rdata <= len;
+                    // Add more cases for other registers if needed
+                    default: rdata <= 32'h0;
                 endcase
                 rvalid <= 1;
+            end else begin
+                rvalid <= 0;
+            end
+
+            // Handle tap coefficient write (axilite)
+            if (ap_start && awvalid && awready) begin
+                case(awaddr)
+                    12'h20: tap_coefficients[awaddr[4:0]] <= wdata;
+                    12'h10: len <= wdata;
+                    // Add more cases for other registers if needed
+                endcase
             end
         end
     end
+
+    // Add more logic to handle other axilite registers and controls
+
+    // Add logic for generating awready, wready, arready, sm_tvalid, sm_tdata, sm_tlast
+
 endmodule
