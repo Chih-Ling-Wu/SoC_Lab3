@@ -73,7 +73,7 @@ module fir
             for (i = Tape_Num-1; i > 0; i = i - 1) begin
                 shift_reg[i] <= shift_reg[i-1];
             end
-            shift_reg[0] <= wdata;
+            shift_reg[0] <= ss_tdata;
             
             // Perform FIR filtering using shift_reg and tap_coefficients
             result <= 0;
