@@ -1,10 +1,8 @@
-`timescale 1ns / 1ps
-
-module fir 
+module fir
 #(
     parameter pADDR_WIDTH = 12,
     parameter pDATA_WIDTH = 32,
-    parameter Tape_Num    = 11
+    parameter Tape_Num = 11
 )
 (
     output  wire                     awready,
@@ -27,7 +25,7 @@ module fir
     output  wire                     sm_tvalid, 
     output  wire [(pDATA_WIDTH-1):0] sm_tdata, 
     output  wire                     sm_tlast, 
-    
+
     // BRAM for tap RAM
     output  wire [3:0]               tap_WE,
     output  wire                     tap_EN,
@@ -45,33 +43,41 @@ module fir
     input   wire                     axis_clk,
     input   wire                     axis_rst_n
 );
-
     // Internal signals and registers
-    reg [(pDATA_WIDTH-1):0] shift_reg [9:0]; // Shift register implemented with SRAM (10 DW)
-    reg [(pDATA_WIDTH-1):0] tap_coeff [10:0]; // Tap coefficients implemented with SRAM (11 DW)
-    reg [(pDATA_WIDTH-1):0] accum;
-    reg [(pDATA_WIDTH-1):0] output_data;
+    reg [31:0] shift_reg [10:0]; // Shift register implemented with SRAM (11 DW)
+    reg [31:0] tap_coeff [10:0]; // Tap coefficients implemented with SRAM (11 DW)
+    reg [31:0] accum;
+    reg [31:0] output_data;
     reg [4:0] tap_ptr;
-    reg [(pDATA_WIDTH-1):0] data_count;
+    reg [31:0] data_count;
     wire tap_wr_enable;
     reg ap_start;
 
-    // Internal AXI-Lite Control Registers
-    reg [(pDATA_WIDTH-1):0] len_write_data;
-    reg len_write_enable;
-    reg [(pDATA_WIDTH-1):0] len_read_data;
-    reg [(pDATA_WIDTH-1):0] ap_start_read_data;
-    reg ap_start_write_enable;
-    reg [(pDATA_WIDTH-1):0] ap_done_write_data;
-    reg ap_done_write_enable;
-    reg i;
-    reg sm_tvalid_reg;
+    // Internal signals for BRAM control and data
+    reg [3:0] internal_tap_WE;
+    reg internal_tap_EN;
+    wire [(pDATA_WIDTH-1):0] internal_tap_Di;
+    wire [(pADDR_WIDTH-1):0] internal_tap_A;
+    wire [(pDATA_WIDTH-1):0] internal_tap_Do;
 
-    // Address map constants
-    localparam ADDR_AP_CTRL = 12'h00;
-    localparam ADDR_DATA_LENGTH = 12'h10;
-    localparam ADDR_TAP_PARAMS_START = 12'h20;
-    localparam ADDR_TAP_PARAMS_END = 12'hFF;
+    reg [3:0] internal_data_WE;
+    reg internal_data_EN;
+    wire [(pDATA_WIDTH-1):0] internal_data_Di;
+    wire [(pADDR_WIDTH-1):0] internal_data_A;
+    wire [(pDATA_WIDTH-1):0] internal_data_Do;
+
+    // Connect internal signals to BRAM ports
+    assign tap_WE = internal_tap_WE;
+    assign tap_EN = internal_tap_EN;
+    assign tap_Di = internal_tap_Di;
+    assign tap_A = internal_tap_A;
+    assign internal_tap_Do = tap_Do;
+
+    assign data_WE = internal_data_WE;
+    assign data_EN = internal_data_EN;
+    assign data_Di = internal_data_Di;
+    assign data_A = internal_data_A;
+    assign internal_data_Do = data_Do;
 
     // Synthesizable reset logic
     always @(posedge axis_clk or negedge axis_rst_n) begin
@@ -85,6 +91,12 @@ module fir
             output_data <= 0;
             tap_ptr <= 0;
             data_count <= 0;
+            coef_write_data <= 0;
+            coef_write_enable <= 0;
+            coef_write_addr <= 0;
+            coef_write_done <= 0;
+            ap_start_write_enable <= 0;
+            ap_done_write_data <= 0;
             len_write_data <= 0;
             len_write_enable <= 0;
             len_read_data <= 0;
@@ -114,14 +126,13 @@ module fir
                 end
                 ADDR_TAP_PARAMS_START: begin
                     if (awvalid) begin
-                        // Write to tap coefficient BRAM
-                        tap_WE <= awaddr[3:0];
-                        tap_EN <= awvalid;
-                        tap_Di <= wdata;
-                        tap_A <= awaddr[(pADDR_WIDTH-1):2];
+                        coef_write_data <= wdata;
+                        coef_write_enable <= 1;
+                        coef_write_addr <= awaddr[7:2];
                     end
                 end
                 default: begin
+                    coef_write_enable <= 0;
                     len_write_enable <= 0;
                 end
             endcase
@@ -213,6 +224,31 @@ module fir
     assign sm_tvalid = sm_tvalid_reg;
     assign sm_tdata = sm_tdata_reg;
     assign sm_tlast = sm_tlast_reg;
+
+    // Implement your tap coefficient write logic here
+    always @(posedge axis_clk or negedge axis_rst_n) begin
+        if (!axis_rst_n) begin
+            // Reset tap coefficient write logic
+        end else begin
+            if (coef_write_enable) begin
+                tap_coeff[coef_write_addr] <= coef_write_data;
+                coef_write_done <= 1;
+            end else begin
+                coef_write_done <= 0;
+            end
+        end
+    end
+
+    // Implement your data length write logic here
+    always @(posedge axis_clk or negedge axis_rst_n) begin
+        if (!axis_rst_n) begin
+            // Reset data length write logic
+        end else begin
+            if (len_write_enable) begin
+                len_read_data <= len_write_data;
+            end
+        end
+    end
 
     // Implement your AXI-Lite read logic for ap_start here
     always @(posedge axis_clk or negedge axis_rst_n) begin
