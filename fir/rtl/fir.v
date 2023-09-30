@@ -50,8 +50,17 @@ module fir
     reg [31:0] output_data;
     reg [4:0] tap_ptr;
     reg [31:0] data_count;
-    wire tap_wr_enable;
-    reg ap_start;
+    reg [31:0] coef_write_data;
+    reg coef_write_enable;
+    reg [4:0] coef_write_addr;
+    reg coef_write_done;
+    reg [31:0] len_write_data;
+    reg len_write_enable;
+    reg [31:0] len_read_data;
+    reg [31:0] ap_start_read_data;
+    reg ap_start_write_enable;
+    reg [31:0] ap_done_write_data;
+    wire [(pADDR_WIDTH-1):0] ap_addr;
 
     // Internal signals for BRAM control and data
     reg [3:0] internal_tap_WE;
@@ -65,7 +74,11 @@ module fir
     wire [(pDATA_WIDTH-1):0] internal_data_Di;
     wire [(pADDR_WIDTH-1):0] internal_data_A;
     wire [(pDATA_WIDTH-1):0] internal_data_Do;
-
+    reg i;
+    reg ap_start;
+    reg sm_tvalid_reg;
+    reg ap_done_write_enable;
+    
     // Connect internal signals to BRAM ports
     assign tap_WE = internal_tap_WE;
     assign tap_EN = internal_tap_EN;
@@ -78,6 +91,11 @@ module fir
     assign data_Di = internal_data_Di;
     assign data_A = internal_data_A;
     assign internal_data_Do = data_Do;
+
+    // Address map constants
+    localparam ADDR_AP_CTRL = 12'h00;
+    localparam ADDR_DATA_LENGTH = 12'h10;
+    localparam ADDR_TAP_PARAMS_START = 12'h20;
 
     // Synthesizable reset logic
     always @(posedge axis_clk or negedge axis_rst_n) begin
