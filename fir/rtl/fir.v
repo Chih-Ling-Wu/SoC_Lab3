@@ -5,45 +5,44 @@ module fir
     parameter Tape_Num = 11
 )
 (
-    output  wire                     awready,
-    output  wire                     wready,
-    input   wire                     awvalid,
-    input   wire [(pADDR_WIDTH-1):0] awaddr,
-    input   wire                     wvalid,
-    input   wire [(pDATA_WIDTH-1):0] wdata,
-    output  wire                     arready,
-    input   wire                     rready,
-    input   wire                     arvalid,
-    input   wire [(pADDR_WIDTH-1):0] araddr,
-    output  wire                     rvalid,
-    output  wire [(pDATA_WIDTH-1):0] rdata,
-    input   wire                     ss_tvalid,
-    input   wire [(pDATA_WIDTH-1):0] ss_tdata,
-    input   wire                     ss_tlast,
-    output  wire                     ss_tready,
-    input   wire                     sm_tready,
-    output  wire                     sm_tvalid,
-    output  wire [(pDATA_WIDTH-1):0] sm_tdata,
-    output  wire                     sm_tlast,
+    output wire awready,
+    output wire wready,
+    input wire awvalid,
+    input wire [(pADDR_WIDTH-1):0] awaddr,
+    input wire wvalid,
+    input wire [(pDATA_WIDTH-1):0] wdata,
+    output wire arready,
+    input wire rready,
+    input wire arvalid,
+    input wire [(pADDR_WIDTH-1):0] araddr,
+    output wire rvalid,
+    output wire [(pDATA_WIDTH-1):0] rdata,
+    input wire ss_tvalid,
+    input wire [(pDATA_WIDTH-1):0] ss_tdata,
+    input wire ss_tlast,
+    output wire ss_tready,
+    input wire sm_tready,
+    output wire sm_tvalid,
+    output wire [(pDATA_WIDTH-1):0] sm_tdata,
+    output wire sm_tlast,
 
     // BRAM for tap RAM
-    output  wire [3:0]               tap_WE,
-    output  wire                     tap_EN,
-    output  wire [(pDATA_WIDTH-1):0] tap_Di,
-    output  wire [(pADDR_WIDTH-1):0] tap_A,
-    input   wire [(pDATA_WIDTH-1):0] tap_Do,
+    output wire [3:0] tap_WE,
+    output wire tap_EN,
+    output wire [(pDATA_WIDTH-1):0] tap_Di,
+    output wire [(pADDR_WIDTH-1):0] tap_A,
+    input wire [(pDATA_WIDTH-1):0] tap_Do,
 
     // BRAM for data RAM
-    output  wire [3:0]               data_WE,
-    output  wire                     data_EN,
-    output  wire [(pDATA_WIDTH-1):0] data_Di,
-    output  wire [(pADDR_WIDTH-1):0] data_A,
-    input   wire [(pDATA_WIDTH-1):0] data_Do,
+    output wire [3:0] data_WE,
+    output wire data_EN,
+    output wire [(pDATA_WIDTH-1):0] data_Di,
+    output wire [(pADDR_WIDTH-1):0] data_A,
+    input wire [(pDATA_WIDTH-1):0] data_Do,
 
-    input   wire                     axis_clk,
-    input   wire                     axis_rst_n
+    input wire axis_clk,
+    input wire axis_rst_n
 );
-
     // Internal signals and registers
     reg [31:0] accum;
     reg [31:0] output_data;
@@ -68,7 +67,7 @@ module fir
     wire [(pADDR_WIDTH-1):0] internal_tap_A;
     wire [(pDATA_WIDTH-1):0] internal_tap_Do;
 
-    reg [3:0] internal_data_WE;
+    reg [3:0] internal_data_WE; // Added this signal
     reg internal_data_EN;
     wire [(pDATA_WIDTH-1):0] internal_data_Di;
     wire [(pADDR_WIDTH-1):0] internal_data_A;
@@ -85,7 +84,7 @@ module fir
     assign tap_A = internal_tap_A;
     assign internal_tap_Do = tap_Do;
 
-    assign data_WE = internal_data_WE;
+    assign data_WE = internal_data_WE; // Added this assignment
     assign data_EN = internal_data_EN;
     assign data_Di = internal_data_Di;
     assign data_A = internal_data_A;
