@@ -1,6 +1,8 @@
 `timescale 1ns / 1ps
+
 module fir 
-#(  parameter pADDR_WIDTH = 12,
+#(
+    parameter pADDR_WIDTH = 12,
     parameter pDATA_WIDTH = 32,
     parameter Tape_Num    = 11
 )
@@ -25,11 +27,27 @@ module fir
     output  wire                     sm_tvalid, 
     output  wire [(pDATA_WIDTH-1):0] sm_tdata, 
     output  wire                     sm_tlast, 
+    
+    // BRAM for tap RAM
+    output  wire [3:0]               tap_WE,
+    output  wire                     tap_EN,
+    output  wire [(pDATA_WIDTH-1):0] tap_Di,
+    output  wire [(pADDR_WIDTH-1):0] tap_A,
+    input   wire [(pDATA_WIDTH-1):0] tap_Do,
+
+    // BRAM for data RAM
+    output  wire [3:0]               data_WE,
+    output  wire                     data_EN,
+    output  wire [(pDATA_WIDTH-1):0] data_Di,
+    output  wire [(pADDR_WIDTH-1):0] data_A,
+    input   wire [(pDATA_WIDTH-1):0] data_Do,
+
     input   wire                     axis_clk,
     input   wire                     axis_rst_n
 );
+
     // Internal signals and registers
-    reg [31:0] shift_reg [10:0]; // Shift register implemented with SRAM (11 DW)
+    reg [31:0] shift_reg [9:0]; // Shift register implemented with SRAM (11 DW)
     reg [31:0] tap_coeff [10:0]; // Tap coefficients implemented with SRAM (11 DW)
     reg [31:0] accum;
     reg [31:0] output_data;
@@ -39,10 +57,6 @@ module fir
     reg ap_start;
 
     // Internal AXI-Lite Control Registers
-    reg [31:0] coef_write_data;
-    reg coef_write_enable;
-    reg [3:0] coef_write_addr;
-    reg coef_write_done;
     reg [31:0] len_write_data;
     reg len_write_enable;
     reg [31:0] len_read_data;
@@ -52,6 +66,7 @@ module fir
     reg ap_done_write_enable;
     reg i;
     reg sm_tvalid_reg;
+
     // Address map constants
     localparam ADDR_AP_CTRL = 12'h00;
     localparam ADDR_DATA_LENGTH = 12'h10;
@@ -70,12 +85,6 @@ module fir
             output_data <= 0;
             tap_ptr <= 0;
             data_count <= 0;
-            coef_write_data <= 0;
-            coef_write_enable <= 0;
-            coef_write_addr <= 0;
-            coef_write_done <= 0;
-            ap_start_write_enable <= 0;
-            ap_done_write_data <= 0;
             len_write_data <= 0;
             len_write_enable <= 0;
             len_read_data <= 0;
@@ -105,13 +114,14 @@ module fir
                 end
                 ADDR_TAP_PARAMS_START: begin
                     if (awvalid) begin
-                        coef_write_data <= wdata;
-                        coef_write_enable <= 1;
-                        coef_write_addr <= awaddr[7:2];
+                        // Write to tap coefficient BRAM
+                        tap_WE <= awaddr[3:0];
+                        tap_EN <= awvalid;
+                        tap_Di <= wdata;
+                        tap_A <= awaddr[(pADDR_WIDTH-1):2];
                     end
                 end
                 default: begin
-                    coef_write_enable <= 0;
                     len_write_enable <= 0;
                 end
             endcase
@@ -203,31 +213,6 @@ module fir
     assign sm_tvalid = sm_tvalid_reg;
     assign sm_tdata = sm_tdata_reg;
     assign sm_tlast = sm_tlast_reg;
-
-    // Implement your tap coefficient write logic here
-    always @(posedge axis_clk or negedge axis_rst_n) begin
-        if (!axis_rst_n) begin
-            // Reset tap coefficient write logic
-        end else begin
-            if (coef_write_enable) begin
-                tap_coeff[coef_write_addr] <= coef_write_data;
-                coef_write_done <= 1;
-            end else begin
-                coef_write_done <= 0;
-            end
-        end
-    end
-
-    // Implement your data length write logic here
-    always @(posedge axis_clk or negedge axis_rst_n) begin
-        if (!axis_rst_n) begin
-            // Reset data length write logic
-        end else begin
-            if (len_write_enable) begin
-                len_read_data <= len_write_data;
-            end
-        end
-    end
 
     // Implement your AXI-Lite read logic for ap_start here
     always @(posedge axis_clk or negedge axis_rst_n) begin
