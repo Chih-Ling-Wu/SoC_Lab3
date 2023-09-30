@@ -44,22 +44,22 @@ module fir
     input   wire                     axis_rst_n
 );
     // Internal signals and registers
-    reg [(pDATA_WIDTH-1):0] shift_reg [10:0]; // Shift register implemented with BRAM (11 DW)
-    reg [(pDATA_WIDTH-1):0] tap_coeff [10:0]; // Tap coefficients implemented with SRAM (11 DW)
-    reg [(pDATA_WIDTH-1):0] accum;
-    reg [(pDATA_WIDTH-1):0] output_data;
+    reg [31:0] shift_reg [10:0]; // Shift register implemented with SRAM (11 DW)
+    reg [31:0] tap_coeff [10:0]; // Tap coefficients implemented with SRAM (11 DW)
+    reg [31:0] accum;
+    reg [31:0] output_data;
     reg [4:0] tap_ptr;
-    reg [(pDATA_WIDTH-1):0] data_count;
-    reg [(pDATA_WIDTH-1):0] coef_write_data;
+    reg [31:0] data_count;
+    reg [31:0] coef_write_data;
     reg coef_write_enable;
     reg [4:0] coef_write_addr;
     reg coef_write_done;
-    reg [(pDATA_WIDTH-1):0] len_write_data;
+    reg [31:0] len_write_data;
     reg len_write_enable;
-    reg [(pDATA_WIDTH-1):0] len_read_data;
-    reg [(pDATA_WIDTH-1):0] ap_start_read_data;
+    reg [31:0] len_read_data;
+    reg [31:0] ap_start_read_data;
     reg ap_start_write_enable;
-    reg [(pDATA_WIDTH-1):0] ap_done_write_data;
+    reg [31:0] ap_done_write_data;
     wire [(pADDR_WIDTH-1):0] ap_addr;
 
     // Internal signals for BRAM control and data
@@ -146,7 +146,7 @@ module fir
                     if (awvalid) begin
                         coef_write_data <= wdata;
                         coef_write_enable <= 1;
-                        coef_write_addr <= awaddr[7:2];
+                        coef_write_addr <= awaddr[(pADDR_WIDTH-1):(pADDR_WIDTH-6)]; // Adjusted for your address mapping
                     end
                 end
                 default: begin
@@ -157,9 +157,30 @@ module fir
         end
     end
 
-    // Shift register implementation using BRAM
-    wire [(pDATA_WIDTH-1):0] internal_shift_Do;
-    assign internal_shift_Do = (ss_tvalid) ? ss_tdata : internal_shift_Do;
+    // Shift register implementation using SRAM
+    always @(posedge axis_clk or posedge axis_rst_n) begin
+        if (!axis_rst_n) begin
+            // Reset shift register
+            for (i = 0; i < 11; i = i + 1) begin
+                shift_reg[i] <= 0;
+            end
+        end else if (ap_start) begin
+            // Reset shift register on ap_start
+            for (i = 0; i < 11; i = i + 1) begin
+                shift_reg[i] <= 0;
+            end
+        end else begin
+            // Shift in data when valid
+            for (i = 10; i > 0; i = i - 1) begin
+                shift_reg[i] <= shift_reg[i - 1];
+            end
+            if (ss_tvalid) begin
+                shift_reg[0] <= ss_tdata;
+            end else begin
+                shift_reg[0] <= 0;
+            end
+        end
+    end
 
     // FIR filtering logic
     always @(posedge axis_clk or posedge axis_rst_n) begin
@@ -181,7 +202,11 @@ module fir
             for (i = 10; i > 0; i = i - 1) begin
                 shift_reg[i] <= shift_reg[i - 1];
             end
-            shift_reg[0] <= internal_shift_Do; // Use BRAM output for shift register
+            if (ss_tvalid) begin
+                shift_reg[0] <= ss_tdata;
+            end else begin
+                shift_reg[0] <= 0;
+            end
 
             // Multiply and accumulate
             accum <= accum + (shift_reg[0] * tap_coeff[tap_ptr]);
@@ -198,7 +223,7 @@ module fir
     end
 
     // AXI-Stream Output Logic
-    reg [(pDATA_WIDTH-1):0] sm_tdata_reg;    // Register for sm_tdata signal
+    reg [0:11] sm_tdata_reg;    // Register for sm_tdata signal
     reg sm_tlast_reg;           // Register for sm_tlast signal
 
     // AXI-Stream output logic
