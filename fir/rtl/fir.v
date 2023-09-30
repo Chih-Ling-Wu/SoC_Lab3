@@ -44,8 +44,6 @@ module fir
     input   wire                     axis_rst_n
 );
     // Internal signals and registers
-    reg [31:0] shift_reg [10:0]; // Shift register implemented with SRAM (11 DW)
-    reg [31:0] tap_coeff [10:0]; // Tap coefficients implemented with SRAM (11 DW)
     reg [31:0] accum;
     reg [31:0] output_data;
     reg [4:0] tap_ptr;
@@ -102,7 +100,6 @@ module fir
         if (!axis_rst_n) begin
             // Reset your module's registers and state here
             for (i = 0; i < 11; i = i + 1) begin
-                shift_reg[i] <= 0;
                 tap_coeff[i] <= 0;
             end
             accum <= 0;
@@ -154,31 +151,6 @@ module fir
                     len_write_enable <= 0;
                 end
             endcase
-        end
-    end
-
-    // Shift register implementation using SRAM
-    always @(posedge axis_clk or posedge axis_rst_n) begin
-        if (!axis_rst_n) begin
-            // Reset shift register
-            for (i = 0; i < 11; i = i + 1) begin
-                shift_reg[i] <= 0;
-            end
-        end else if (ap_start) begin
-            // Reset shift register on ap_start
-            for (i = 0; i < 11; i = i + 1) begin
-                shift_reg[i] <= 0;
-            end
-        end else begin
-            // Shift in data when valid
-            for (i = 10; i > 0; i = i - 1) begin
-                shift_reg[i] <= shift_reg[i - 1];
-            end
-            if (ss_tvalid) begin
-                shift_reg[0] <= ss_tdata;
-            end else begin
-                shift_reg[0] <= 0;
-            end
         end
     end
 
