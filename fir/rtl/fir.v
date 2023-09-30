@@ -2,7 +2,7 @@ module fir
 #(
     parameter pADDR_WIDTH = 12,
     parameter pDATA_WIDTH = 32,
-    parameter Tape_Num    = 11
+    parameter Tape_Num = 11
 )
 (
     output  wire                     awready,
@@ -25,7 +25,7 @@ module fir
     output  wire                     sm_tvalid, 
     output  wire [(pDATA_WIDTH-1):0] sm_tdata, 
     output  wire                     sm_tlast, 
-    
+
     // BRAM for tap RAM
     output  wire [3:0]               tap_WE,
     output  wire                     tap_EN,
@@ -44,8 +44,6 @@ module fir
     input   wire                     axis_rst_n
 );
     // Internal signals and registers
-    reg [31:0] shift_reg [10:0]; // Shift register implemented with BRAM (11 DW)
-    reg [31:0] tap_coeff [10:0]; // Tap coefficients implemented with BRAM (11 DW)
     reg [31:0] accum;
     reg [31:0] output_data;
     reg [4:0] tap_ptr;
@@ -79,19 +77,18 @@ module fir
     reg sm_tvalid_reg;
     reg ap_done_write_enable;
     
-    // Connect internal signals to BRAM ports for shift register
-    assign internal_tap_WE = 4'b0000; // No writes to shift register
-    assign internal_tap_EN = 1'b0;    // No write enable for shift register
-    assign internal_tap_Di = 32'b0;   // No data to be written to shift register
-    assign internal_tap_A = 12'b0;    // Address for shift register (always 0)
-    assign internal_tap_Do = (ss_tvalid) ? ss_tdata : internal_tap_Do;
+    // Connect internal signals to BRAM ports
+    assign tap_WE = internal_tap_WE;
+    assign tap_EN = internal_tap_EN;
+    assign tap_Di = internal_tap_Di;
+    assign tap_A = internal_tap_A;
+    assign internal_tap_Do = tap_Do;
 
-    // Connect internal signals to BRAM ports for tap coefficients
-    assign internal_data_WE = coef_write_enable ? coef_write_addr : 4'b0000;
-    assign internal_data_EN = coef_write_enable;
-    assign internal_data_Di = coef_write_data;
-    assign internal_data_A = coef_write_enable ? awaddr[(pADDR_WIDTH-1):4] : 12'b0;
-    assign internal_data_Do = tap_Do;
+    assign data_WE = internal_data_WE;
+    assign data_EN = internal_data_EN;
+    assign data_Di = internal_data_Di;
+    assign data_A = internal_data_A;
+    assign internal_data_Do = data_Do;
 
     // Address map constants
     localparam ADDR_AP_CTRL = 12'h00;
@@ -103,7 +100,6 @@ module fir
         if (!axis_rst_n) begin
             // Reset your module's registers and state here
             for (i = 0; i < 11; i = i + 1) begin
-                shift_reg[i] <= 0;
                 tap_coeff[i] <= 0;
             end
             accum <= 0;
@@ -147,7 +143,7 @@ module fir
                     if (awvalid) begin
                         coef_write_data <= wdata;
                         coef_write_enable <= 1;
-                        coef_write_addr <= awaddr[7:2];
+                        coef_write_addr <= awaddr[(pADDR_WIDTH-1):(pADDR_WIDTH-6)]; // Adjusted for your address mapping
                     end
                 end
                 default: begin
