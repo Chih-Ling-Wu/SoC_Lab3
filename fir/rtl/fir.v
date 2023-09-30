@@ -47,22 +47,22 @@ module fir
 );
 
     // Internal signals and registers
-    reg [31:0] shift_reg [9:0]; // Shift register implemented with SRAM (10 DW)
-    reg [31:0] tap_coeff [10:0]; // Tap coefficients implemented with SRAM (11 DW)
-    reg [31:0] accum;
-    reg [31:0] output_data;
+    reg [(pDATA_WIDTH-1):0] shift_reg [9:0]; // Shift register implemented with SRAM (10 DW)
+    reg [(pDATA_WIDTH-1):0] tap_coeff [10:0]; // Tap coefficients implemented with SRAM (11 DW)
+    reg [(pDATA_WIDTH-1):0] accum;
+    reg [(pDATA_WIDTH-1):0] output_data;
     reg [4:0] tap_ptr;
-    reg [31:0] data_count;
+    reg [(pDATA_WIDTH-1):0] data_count;
     wire tap_wr_enable;
     reg ap_start;
 
     // Internal AXI-Lite Control Registers
-    reg [31:0] len_write_data;
+    reg [(pDATA_WIDTH-1):0] len_write_data;
     reg len_write_enable;
-    reg [31:0] len_read_data;
-    reg [31:0] ap_start_read_data;
+    reg [(pDATA_WIDTH-1):0] len_read_data;
+    reg [(pDATA_WIDTH-1):0] ap_start_read_data;
     reg ap_start_write_enable;
-    reg [31:0] ap_done_write_data;
+    reg [(pDATA_WIDTH-1):0] ap_done_write_data;
     reg ap_done_write_enable;
     reg i;
     reg sm_tvalid_reg;
