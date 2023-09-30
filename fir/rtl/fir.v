@@ -47,7 +47,7 @@ module fir
 );
 
     // Internal signals and registers
-    reg [31:0] shift_reg [9:0]; // Shift register implemented with SRAM (11 DW)
+    reg [31:0] shift_reg [9:0]; // Shift register implemented with SRAM (10 DW)
     reg [31:0] tap_coeff [10:0]; // Tap coefficients implemented with SRAM (11 DW)
     reg [31:0] accum;
     reg [31:0] output_data;
