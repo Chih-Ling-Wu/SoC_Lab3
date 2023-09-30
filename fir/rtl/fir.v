@@ -1,4 +1,4 @@
-module fir 
+module fir
 #(
     parameter pADDR_WIDTH = 12,
     parameter pDATA_WIDTH = 32,
@@ -16,15 +16,15 @@ module fir
     input   wire                     arvalid,
     input   wire [(pADDR_WIDTH-1):0] araddr,
     output  wire                     rvalid,
-    output  wire [(pDATA_WIDTH-1):0] rdata,    
-    input   wire                     ss_tvalid, 
-    input   wire [(pDATA_WIDTH-1):0] ss_tdata, 
-    input   wire                     ss_tlast, 
-    output  wire                     ss_tready, 
-    input   wire                     sm_tready, 
-    output  wire                     sm_tvalid, 
-    output  wire [(pDATA_WIDTH-1):0] sm_tdata, 
-    output  wire                     sm_tlast, 
+    output  wire [(pDATA_WIDTH-1):0] rdata,
+    input   wire                     ss_tvalid,
+    input   wire [(pDATA_WIDTH-1):0] ss_tdata,
+    input   wire                     ss_tlast,
+    output  wire                     ss_tready,
+    input   wire                     sm_tready,
+    output  wire                     sm_tvalid,
+    output  wire [(pDATA_WIDTH-1):0] sm_tdata,
+    output  wire                     sm_tlast,
 
     // BRAM for tap RAM
     output  wire [3:0]               tap_WE,
@@ -43,6 +43,7 @@ module fir
     input   wire                     axis_clk,
     input   wire                     axis_rst_n
 );
+
     // Internal signals and registers
     reg [31:0] accum;
     reg [31:0] output_data;
@@ -76,7 +77,7 @@ module fir
     reg ap_start;
     reg sm_tvalid_reg;
     reg ap_done_write_enable;
-    
+
     // Connect internal signals to BRAM ports
     assign tap_WE = internal_tap_WE;
     assign tap_EN = internal_tap_EN;
