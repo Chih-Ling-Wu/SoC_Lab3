@@ -49,27 +49,35 @@ reg [(pDATA_WIDTH-1):0] length_reg;
 
 reg [(pDATA_WIDTH-1):0] tap_write;
 reg [(pDATA_WIDTH-1):0] tap_read;
+reg [(pADDR_WIDTH-1):0] awaddr_reg;
 
 reg ap_start;
 // Axilite 
-assign tap_WE = (awvalid & wvalid)? 1'b1 : 1'b0;
+assign tap_WE = (awvalid & wvalid)? 4'b1111 : 4'b00000;
 assign tap_EN = (awvalid & wvalid) | (arvalid && rready)? 1'b1 : 1'b0;
-assign tap_A = (awvalid & wvalid) ? awaddr : (awvalid & wvalid)? araddr : 'd0;
-assign tap_Di = tap_write;
+assign tap_A = awaddr_reg;
+assign tap_Di = wdata;
 
 assign rdata = tap_read;
 
-always@(posedge axis_clk or negedge axis_rst_n)begin
+reg wready_reg;
+assign wready = wvalid; 
+
+
+reg rvalid_reg;
+assign rvalid = rready; 
+always@(posedge axis_clk or negedge axis_rst_n) begin
     if (~axis_rst_n) begin
         tap_write <= 'd0;
         tap_read <= 'd0;
         length_reg <= 'd0;
+        wready_reg <= 1'b0;
+        rvalid_reg <= 1'b0;
     end 
     else if (awvalid && wvalid) begin
         // Write operation: Store wdata into data RAM (bram11) using data_WE, data_EN, data_Di, and data_A
+        awaddr_reg <= awaddr;
         tap_write <= wdata;
-        if(awaddr == 'h10) length_reg <= tap_write;
-        else length_reg <= length_reg;
     end 
     else if (arvalid && rready) begin
         tap_read <= tap_Do;
