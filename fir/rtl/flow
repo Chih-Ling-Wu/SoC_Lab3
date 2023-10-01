@@ -1,1 +1,67 @@
+Axilite :
+1. Receive length and tap and read back to tb
+always @(posedge axis_clk or negedge axis_rst_n) begin
+    if (!axis_rst_n) begin
+        // Reset logic if necessary
+    end else if (awvalid && wvalid) begin
+        // Write operation: Store wdata into data RAM (bram11) using data_WE, data_EN, data_Di, and data_A
+        wready <= 1;
+        tap_WE <= 4'b1111; // Set the write enable to write all bytes
+        tap_EN <= 1'b1;    // Enable the write operation
+        tap_Di <= wdata;   // Set the data to be written
+        tap_A <= awaddr;   // Set the address for writing
+        if(awwaddr) length_reg <= wdata;
+        else length_reg <= length_reg;
 
+    end else if (arvalid && rready) begin
+        // Read operation: Fetch data from data RAM (bram11) based on araddr
+        // Use the data_Do port to read data from bram11
+        rvalid <= 1;                         // Set rvalid to indicate valid read data
+        tap_WE <= 4'b0000; 
+        tap_EN <= 1'b1;    
+        tap_A <= araddr;   // Set the address for writing
+        rdata <= tap_Do;
+    end else begin
+        // Address is not 0x10 or no valid write or read request, so don't accept the request.
+        wready <= 0;
+        rvalid <= 0;
+    end
+end
+
+always @(posedge axis_clk or negedge axis_rst_n) begin
+if (!axis_rst_n) begin
+        // Reset logic if necessary
+else begin
+    tap_WE <= 4'b0000; // Set the write enable to write all bytes
+    tap_EN <= 1'b1;    // Enable the write operation
+    tap_A <= 12'h00;   // Set the address for writing
+    ap_start <= tap_Do  // Set the data to be written
+end
+
+
+integer count = 0; // Initialize count
+
+always @(posedge axis_clk or negedge axis_rst_n) begin
+    if (!axis_rst_n) begin
+        // Reset logic if necessary
+    end else if (ss_tvalid) begin // Use "if" instead of parentheses
+        // Write operation: Store wdata into data RAM (bram11) using data_WE, data_EN, data_Di, and data_A
+        tap_WE <= 4'b1111; // Set the write enable to write all bytes
+        tap_EN <= 1'b1;    // Enable the write operation
+        tap_Di <= ss_tdata;   // Set the data to be written
+        tap_A <= 0x30 + count;   // Set the address for writing
+        count = count + 5; // Increment count by 5
+        if (ss_tlast) ss_tready <= 1'b0;
+        else ss_tready <= 1'b1;
+    end 
+end
+
+always @(posedge axis_clk or negedge axis_rst_n) begin
+    if (!axis_rst_n) begin
+        // Reset logic if necessary
+    end else if (ap_start)  ap_idle <= 1'b0; // memory write
+    else if (transferred last data) ap_idle <= 1'b1; // memory write
+    else ap_idle <= ap_idle
+        
+    end 
+end
