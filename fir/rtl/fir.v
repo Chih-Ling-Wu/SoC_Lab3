@@ -46,107 +46,40 @@ module fir
 
 reg [(pDATA_WIDTH-1):0] length_reg;
 
-reg [3:0] tap_WE_reg; // Change to 4-bit wide
-reg tap_EN_reg;
-reg [(pDATA_WIDTH-1):0] tap_Di_reg;
-reg [(pADDR_WIDTH-1):0] tap_A_reg;
-reg [(pDATA_WIDTH-1):0] rdata_reg;
 
-// Add the missing declarations here
-reg wready_reg;
-reg rvalid_reg;
-
-assign tap_WE = tap_WE_reg;
-assign tap_EN = tap_EN_reg;
-assign tap_Di = tap_Di_reg;
-assign tap_A = tap_A_reg;
-assign rdata = rdata_reg;
-assign rvalid = rvalid_reg;
-assign wready = wready_reg;
-
+reg [(pDATA_WIDTH-1):0] tap_write;
+reg [(pDATA_WIDTH-1):0] tap_read;
 
 reg ap_start;
 // Axilite 
+assign tap_WE = (awvalid & wvalid)? 1'b1 : 1'b0;
+assign tap_EN = (awvalid & wvalid) | (arvalid && rready)? 1'b1 : 1'b0;
+assign tap_A = (awvalid & wvalid) ? awaddr : (awvalid & wvalid)? araddr : 'd0;
+assign tap_Di = tap_write;
+
+assign rdata = tap_read;
+
 always@(posedge axis_clk or negedge axis_rst_n)begin
     if (~axis_rst_n) begin
-        wready_reg <= 1'b0;
-        rvalid_reg <= 1'b0;
-
-        tap_WE_reg <= 4'b0000; 
-        tap_EN_reg <= 1'b0;
-        tap_A_reg <= 'd0;     
-        tap_Di_reg <= 'd0;  
+        tap_write <= 'd0;
+        tap_read <= 'd0;
         length_reg <= 'd0;
-        rdata_reg <= 'd0;
     end 
     else if (awvalid && wvalid) begin
         // Write operation: Store wdata into data RAM (bram11) using data_WE, data_EN, data_Di, and data_A
-        wready_reg <= 1'b1;
-        tap_WE_reg <= 4'b1111; 
-        tap_EN_reg <= 1'b1;
-        tap_A_reg <= awaddr;     
-        tap_Di_reg <= wdata;     
-        if(awaddr == 'h10) length_reg <= wdata;
+        tap_write <= wdata;
+        if(awaddr == 'h10) length_reg <= tap_write;
         else length_reg <= length_reg;
     end 
     else if (arvalid && rready) begin
-        // Read operation: Fetch data from data RAM (bram11) based on araddr
-        // Use the data_Do port to read data from bram11
-        rvalid_reg <= 1'b1;                         // Set rvalid to indicate valid read data
-        tap_WE_reg <= 4'b0000; 
-        tap_EN_reg <= 1'b1;    
-        tap_A_reg <= araddr;   // Set the address for writing
-        rdata_reg <= tap_Do;
+        tap_read <= tap_Do;
     end else begin
-        wready_reg <= wready_reg;
-        rvalid_reg <= rvalid_reg;
-        tap_WE_reg <= tap_WE_reg; 
-        tap_EN_reg <= tap_EN_reg;
-        tap_A_reg <= tap_A_reg ;     
-        tap_Di_reg <= tap_Di_reg;  
-        length_reg <= length_reg;
-        rdata_reg <= rdata_reg;
+        tap_write <= 'd0;
+        tap_read <= 'd0;
+        length_reg <= 'd0;
     end
 end 
 
-// ap_start
-always @(posedge axis_clk or negedge axis_rst_n) begin
-    if (!axis_rst_n) begin
-        tap_WE_reg <= 4'b0000; 
-        tap_EN_reg <= 1'b0;
-        tap_A_reg <= 'd0;     
-        ap_start <= 1'b0;
-    end
-    else begin
-        tap_WE_reg <= 4'b0000; 
-        tap_EN_reg <= 1'b1;    
-        tap_A_reg <= 12'h00;   
-        ap_start <= tap_Do;  
-    end
-end
-
-integer i;
-reg ss_tready_reg;
-assign ss_tready = ss_tready_reg;
-
-always @(posedge axis_clk or negedge axis_rst_n) begin
-    if (!axis_rst_n) begin
-        tap_WE_reg <= 4'b0000; 
-        tap_EN_reg <= 1'b0;
-        tap_A_reg <= 'd0;  
-        ss_tready_reg <= 1'b0;
-        i = 0; 
-    end 
-    else if (ss_tvalid) begin 
-        tap_WE_reg <= 4'b1111; 
-        tap_EN_reg <= 1'b1;   
-        tap_Di_reg <= ss_tdata;  
-        tap_A_reg <= 'h30 + i;   
-        i = i + 5; 
-        if (ss_tlast) ss_tready_reg <= 1'b0;
-        else ss_tready_reg <= 1'b1;
-    end 
-end
 
 
 endmodule
