@@ -42,9 +42,6 @@ module fir
     input   wire                     axis_clk,
     input   wire                     axis_rst_n
 );
-begin
-
-    // write your code here!
 
 
 end
