@@ -18,7 +18,7 @@
 // Additional Comments:
 // 
 //////////////////////////////////////////////////////////////////////////////////
-`include "/home/ubuntu/SoC_Lab3/bram/bram11.v"
+`include "../bram/bram11.v"
 
 module fir_tb
 #(  parameter pADDR_WIDTH = 12,
