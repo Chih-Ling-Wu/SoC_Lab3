@@ -92,14 +92,14 @@ module fir_tb
         .tap_EN(tap_EN),
         .tap_Di(tap_Di),
         .tap_A(tap_A),
-        .tap_Do(tap_Do)
+        .tap_Do(tap_Do),
 
         // ram for data
-        .data_WE(data_WE),
-        .data_EN(data_EN),
-        .data_Di(data_Di),
-        .data_A(data_A),
-        .data_Do(data_Do)
+        .tap_WE(data_WE),
+        .tap_EN(data_EN),
+        .tap_Di(data_Di),
+        .tap_A(data_A),
+        .tap_Do(data_Do),
 
         .axis_clk(axis_clk),
         .axis_rst_n(axis_rst_n)
@@ -128,7 +128,8 @@ module fir_tb
 
     reg signed [(pDATA_WIDTH-1):0] Din_list[0:(Data_Num-1)];
     reg signed [(pDATA_WIDTH-1):0] golden_list[0:(Data_Num-1)];
-
+    reg error_coef;
+    
     initial begin
         $dumpfile("fir.vcd");
         $dumpvars();
@@ -223,7 +224,7 @@ module fir_tb
         coef[10] =  32'd0;
     end
 
-    reg error_coef;
+    
     initial begin
         error_coef = 0;
         $display("----Start the coefficient input(AXI-lite)----");
