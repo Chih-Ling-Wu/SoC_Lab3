@@ -46,16 +46,20 @@ module fir
 
 reg [(pDATA_WIDTH-1):0] length_reg;
 
-reg tap_WE_reg, tap_EN_reg, tap_Di_reg, tap_A_reg;
+reg [3:0] tap_WE_reg; // Change to 4-bit wide
+reg tap_EN_reg;
+reg [(pDATA_WIDTH-1):0] tap_Di_reg;
+reg [(pADDR_WIDTH-1):0] tap_A_reg;
+reg [(pDATA_WIDTH-1):0] rdata_reg;
+
+// Add the missing declarations here
+reg wready_reg;
+reg rvalid_reg;
+
 assign tap_WE = tap_WE_reg;
 assign tap_EN = tap_EN_reg;
 assign tap_Di = tap_Di_reg;
 assign tap_A = tap_A_reg;
-
-reg wready_reg;
-reg rvalid_reg;
-reg rdata_reg;
-
 assign rdata = rdata_reg;
 assign rvalid = rvalid_reg;
 assign wready = wready_reg;
