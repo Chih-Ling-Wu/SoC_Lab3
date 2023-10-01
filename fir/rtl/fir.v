@@ -65,6 +65,11 @@ assign rvalid = rvalid_reg;
 assign wready = wready_reg;
 
 
+
+integer i;
+reg ss_tready_reg;
+assign ss_tready = ss_tready_reg;
+
 reg ap_start;
 // Axilite 
 always@(posedge axis_clk or negedge axis_rst_n)begin
@@ -79,6 +84,12 @@ always@(posedge axis_clk or negedge axis_rst_n)begin
         length_reg <= 'd0;
         rdata_reg <= 'd0;
     end 
+    if(awaddr == 'h10) begin
+        tap_WE_reg <= 4'b0000; 
+        tap_EN_reg <= 1'b1;    
+        tap_A_reg <= 12'h00;   
+        ap_start <= tap_Do; 
+    end
     else if (awvalid && wvalid) begin
         // Write operation: Store wdata into data RAM (bram11) using data_WE, data_EN, data_Di, and data_A
         wready_reg <= 1'b1;
@@ -97,7 +108,17 @@ always@(posedge axis_clk or negedge axis_rst_n)begin
         tap_EN_reg <= 1'b1;    
         tap_A_reg <= araddr;   // Set the address for writing
         rdata_reg <= tap_Do;
-    end else begin
+    end 
+    else if (ss_tvalid) begin 
+        tap_WE_reg <= 4'b1111; 
+        tap_EN_reg <= 1'b1;   
+        tap_Di_reg <= ss_tdata;  
+        tap_A_reg <= 'h30 + i;   
+        i = i + 5; 
+        if (ss_tlast) ss_tready_reg <= 1'b0;
+        else ss_tready_reg <= 1'b1;
+    end 
+    else begin
         wready_reg <= wready_reg;
         rvalid_reg <= rvalid_reg;
         tap_WE_reg <= tap_WE_reg; 
@@ -109,44 +130,9 @@ always@(posedge axis_clk or negedge axis_rst_n)begin
     end
 end 
 
-// ap_start
-always @(posedge axis_clk or negedge axis_rst_n) begin
-    if (!axis_rst_n) begin
-        tap_WE_reg <= 4'b0000; 
-        tap_EN_reg <= 1'b0;
-        tap_A_reg <= 'd0;     
-        ap_start <= 1'b0;
-    end
-    else begin
-        tap_WE_reg <= 4'b0000; 
-        tap_EN_reg <= 1'b1;    
-        tap_A_reg <= 12'h00;   
-        ap_start <= tap_Do;  
-    end
-end
 
-integer i;
-reg ss_tready_reg;
-assign ss_tready = ss_tready_reg;
 
-always @(posedge axis_clk or negedge axis_rst_n) begin
-    if (!axis_rst_n) begin
-        tap_WE_reg <= 4'b0000; 
-        tap_EN_reg <= 1'b0;
-        tap_A_reg <= 'd0;  
-        ss_tready_reg <= 1'b0;
-        i = 0; 
-    end 
-    else if (ss_tvalid) begin 
-        tap_WE_reg <= 4'b1111; 
-        tap_EN_reg <= 1'b1;   
-        tap_Di_reg <= ss_tdata;  
-        tap_A_reg <= 'h30 + i;   
-        i = i + 5; 
-        if (ss_tlast) ss_tready_reg <= 1'b0;
-        else ss_tready_reg <= 1'b1;
-    end 
-end
+
 
 
 endmodule
