@@ -1,3 +1,4 @@
+`timescale 1ns / 1ps
 module fir 
 #(  parameter pADDR_WIDTH = 12,
     parameter pDATA_WIDTH = 32,
