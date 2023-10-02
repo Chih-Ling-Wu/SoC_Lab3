@@ -132,7 +132,7 @@ module fir_tb
     
     initial begin
         $dumpfile("fir.vcd");
-        $dumpvars();
+        $dumpvars(0, fir_tb); // Ensure fir_tb contains all the signals you want to monitor
     end
 
 
@@ -269,6 +269,7 @@ module fir_tb
             rready <= 1;
             @(posedge axis_clk);
             while (!rvalid) @(posedge axis_clk);
+            repeat(3) @(posedge axis_clk);
             if( (rdata & mask) != (exp_data & mask)) begin
                 $display("ERROR: exp = %d, rdata = %d", exp_data, rdata);
                 error_coef <= 1;
