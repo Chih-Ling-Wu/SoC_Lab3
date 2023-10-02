@@ -44,47 +44,66 @@ module fir
     input   wire                     axis_rst_n
 );
 
-reg [(pDATA_WIDTH-1):0] length_reg;
+reg [(pDATA_WIDTH-1):0] data_length;
 
 
-reg [(pDATA_WIDTH-1):0] tap_write;
-reg [(pDATA_WIDTH-1):0] tap_read;
-reg [(pADDR_WIDTH-1):0] awaddr_reg;
 
 reg ap_start;
 // Axilite 
-assign tap_WE = (awvalid & wvalid)? 4'b1111 : 4'b00000;
-assign tap_EN = (awvalid & wvalid) | (arvalid && rready)? 1'b1 : 1'b0;
-assign tap_A = awaddr_reg;
-assign tap_Di = wdata;
+reg [3:0]tap_WE_reg;
+assign tap_WE = tap_WE_reg;
 
+reg [(pADDR_WIDTH-1):0] addr_reg;
+assign tap_A = (addr_reg);
+
+reg [(pDATA_WIDTH-1):0] tap_write;
+assign tap_Di = tap_write;
+
+reg [(pDATA_WIDTH-1):0] tap_read;
 assign rdata = tap_read;
 
-reg wready_reg;
-assign wready = wvalid; 
 
+reg tap_EN_reg;
+assign tap_EN = tap_EN_reg;
 
 reg rvalid_reg;
-assign rvalid = rready; 
+assign rvalid = rvalid_reg; 
+assign wready = wvalid;
+
+reg [2:0] rvalid_count;
+
+
 always@(posedge axis_clk or negedge axis_rst_n) begin
     if (~axis_rst_n) begin
         tap_write <= 'd0;
         tap_read <= 'd0;
-        length_reg <= 'd0;
-        wready_reg <= 1'b0;
-        rvalid_reg <= 1'b0;
+        data_length <= 'd0;
+        tap_EN_reg <= 1'b0;
+        tap_WE_reg <= 4'b0000;
+        rvalid_count <= 3'b000;
     end 
-    else if (awvalid && wvalid) begin
-        // Write operation: Store wdata into data RAM (bram11) using data_WE, data_EN, data_Di, and data_A
-        awaddr_reg <= awaddr;
-        tap_write <= wdata;
+    else if (wvalid) begin
+        if(awaddr == 12'h10) data_length <= wdata;
+        else  begin
+            addr_reg <= awaddr;
+            tap_write <= wdata;
+            tap_EN_reg <= 1'b1;
+            tap_WE_reg <= 4'b1111;
+        end
     end 
-    else if (arvalid && rready) begin
+    else if (rready) begin
         tap_read <= tap_Do;
+        tap_EN_reg <= 1'b1;
+        tap_WE_reg <= 4'b0000;
+        addr_reg <= araddr; 
+        rvalid_reg <= 1'b1;
     end else begin
-        tap_write <= 'd0;
+        tap_write <= tap_write;
         tap_read <= 'd0;
-        length_reg <= 'd0;
+        data_length <= data_length;
+        tap_EN_reg <= 1'b1;
+        tap_WE_reg <= 4'b0000;
+        rvalid_count =  3'b000;
     end
 end 
 
