@@ -234,7 +234,6 @@ always @(posedge axis_clk or negedge axis_rst_n) begin
     end else begin
         // Shift data through the register
         if(count >= 'd51) begin
-            if(mul_count == 'd0)
             shift_1 <= data_Do;
             shift_2 <= shift_1;
             shift_3 <= shift_2;
@@ -246,6 +245,7 @@ always @(posedge axis_clk or negedge axis_rst_n) begin
             shift_9 <= shift_8;
             shift_10 <= shift_9;
             shift_11 <= shift_10;
+
         end
     end
 end
