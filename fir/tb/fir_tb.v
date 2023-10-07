@@ -170,7 +170,7 @@ module fir_tb
         for(i=0;i<(data_length-1);i=i+1) begin
             ss_tlast = 0; ss(Din_list[i]);
         end
-        // config_read_check(12'h00, 32'h00, 32'h0000_000f); // check idle = 0
+        config_read_check(12'h00, 32'h00, 32'h0000_000f); // check idle = 0
         ss_tlast = 1; ss(Din_list[(Data_Num-1)]);
         $display("------End the data input(AXI-Stream)------");
     end
@@ -188,8 +188,8 @@ module fir_tb
             for(k=0;k < data_length;k=k+1) begin
                 sm(golden_list[k],k);
             end
-        // config_read_check(12'h00, 32'h02, 32'h0000_0002); // check ap_done = 1 (0x00 [bit 1])
-        // config_read_check(12'h00, 32'h04, 32'h0000_0004); // check ap_idle = 1 (0x00 [bit 2])
+        config_read_check(12'h00, 32'h02, 32'h0000_0002); // check ap_done = 1 (0x00 [bit 1])
+        config_read_check(12'h00, 32'h04, 32'h0000_0004); // check ap_idle = 1 (0x00 [bit 2])
         if (error == 0 & error_coef == 0) begin
             $display("---------------------------------------------");
             $display("-----------Congratulations! Pass-------------");
