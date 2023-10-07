@@ -147,11 +147,10 @@ always @(posedge axis_clk or negedge axis_rst_n) begin
     else begin
         case (cur_state)
             LOAD : begin
-                if(count < Tape_Num - 1) count <= count + 1'b1;
-                else count <= 'd0;
+                count <= 'd0;
             end
             MAC : begin
-                if(count < Tape_Num ) count <= count + 1'b1;
+                if(count < Tape_Num) count <= count + 1'b1;
                 else count <= 'd0;
             end
             default count <= count;
@@ -161,9 +160,10 @@ end
 
 always@* begin
     case(cur_state)
-        IDLE : next_state = (global_count >= 'd30)? LOAD : IDLE;
+        IDLE : next_state = (global_count >= 'd70)? LOAD : IDLE;
         // IDLE : next_state = LOAD;
-        LOAD : next_state = (count == Tape_Num - 1) ? MAC  : LOAD;
+        // LOAD : next_state = (count == Tape_Num - 1) ? MAC  : LOAD;
+        LOAD : next_state = MAC;
         MAC : begin
             if(count == Tape_Num) next_state = LOAD;
             else next_state = MAC;
@@ -184,7 +184,7 @@ assign data_A = data_A_reg;
 
 // stream in input
 
-assign ss_tready = (global_count >= 'd30) & (count == 'd0) & (cur_state == LOAD) ? 1'b1 : 1'b0;
+assign ss_tready = (count == 'd0) & (cur_state == LOAD) | ((cur_state == IDLE) & (next_state == LOAD))? 1'b1 : 1'b0;
 // assign ss_tready = (count == 'd0) & (cur_state == LOAD) ? 1'b1 : 1'b0;
 always@* begin
     if(ss_tready) begin
@@ -218,12 +218,13 @@ always@(posedge axis_clk or negedge axis_rst_n) begin
             shift[i] <= 'd0;
     end
     else begin
-        if(cur_state == MAC && count == 'd0) begin
+        // if(cur_state == MAC && count == 'd1) begin
+        if(cur_state == LOAD) begin
             for(i = 1 ; i < Tape_Num; i = i + 1) begin
                 shift[i] <= shift[i-1];
             end
             shift[0] <= data_Do;
-        end
+        end 
     end
 end
 always @(posedge axis_clk or negedge axis_rst_n) begin
@@ -235,15 +236,9 @@ always @(posedge axis_clk or negedge axis_rst_n) begin
     else begin
         case (cur_state)
             MAC : begin
-                if(count < 'd11) begin
-                    cur_data <= shift[count];
-                    prev_sum <= cur_sum;
-                    cur_coef <= coef[count];
-                end else begin
-                    cur_data <= cur_data;
-                    prev_sum <= prev_sum;
-                    cur_coef <= cur_coef ;
-                end
+                cur_data <= shift[count];
+                prev_sum <= cur_sum;
+                cur_coef <= coef[count];
             end
             default: begin
                 cur_data <= 'd0;
