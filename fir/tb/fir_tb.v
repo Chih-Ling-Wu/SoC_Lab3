@@ -181,7 +181,7 @@ module fir_tb
     reg error_coef;
     initial begin
         error = 0; status_error = 0;
-        repeat (30) @(negedge axis_clk);
+        repeat (50) @(negedge axis_clk);
         sm_tready = 1;
         wait (sm_tvalid);
         @(posedge axis_clk);
