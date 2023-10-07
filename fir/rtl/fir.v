@@ -79,12 +79,14 @@ always@* begin
             tap_write = wdata;
             tap_EN_reg = 1'b1;
             tap_WE_reg = 4'b1111;
+            tap_read  = 'd0;
         end
         else begin
             addr_reg = 'd0;
             tap_write = 'd0;
             tap_EN_reg = 'd0;
             tap_WE_reg = 'd0;
+            tap_read  = 'd0;
         end
     end 
     else if (arvalid) begin
@@ -93,12 +95,14 @@ always@* begin
             tap_EN_reg = 1'b1;
             tap_WE_reg = 4'b0000;
             addr_reg = araddr-12'h20; 
+            tap_write = 'd0;
         end
         else begin
             addr_reg = 'd0;
             tap_read  = 'd0;
             tap_EN_reg = 'd0;
             tap_WE_reg = 'd0;
+            tap_write = 'd0;
         end
     end 
     else begin
