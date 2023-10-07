@@ -80,6 +80,12 @@ always@* begin
             tap_EN_reg = 1'b1;
             tap_WE_reg = 4'b1111;
         end
+        else begin
+            addr_reg = 'd0;
+            tap_write = 'd0;
+            tap_EN_reg = 'd0;
+            tap_WE_reg = 'd0;
+        end
     end 
     else if (arvalid) begin
         if(araddr != 12'h00) begin
@@ -88,7 +94,20 @@ always@* begin
             tap_WE_reg = 4'b0000;
             addr_reg = araddr-12'h20; 
         end
+        else begin
+            addr_reg = 'd0;
+            tap_read  = 'd0;
+            tap_EN_reg = 'd0;
+            tap_WE_reg = 'd0;
+        end
     end 
+    else begin
+        addr_reg = 'd0;
+        tap_write = 'd0;
+        tap_read  = 'd0;
+        tap_EN_reg = 'd0;
+        tap_WE_reg = 'd0;
+    end
 end 
 
 always@(posedge axis_clk or negedge axis_rst_n) begin
@@ -206,6 +225,12 @@ always@* begin
         data_EN_reg = 1'b1;
         data_WE_reg = 4'b1111;
         data_write = ss_tdata;
+    end
+    else begin
+        data_A_reg ='d0;
+        data_EN_reg = 'd0;
+        data_WE_reg = 'd0;
+        data_write = 'd0;
     end
 end
 
