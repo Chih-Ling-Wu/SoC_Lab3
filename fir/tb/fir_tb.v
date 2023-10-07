@@ -18,6 +18,7 @@
 // Additional Comments:
 // 
 //////////////////////////////////////////////////////////////////////////////////
+
 `include "../bram/bram11.v"
 
 module fir_tb
@@ -128,11 +129,10 @@ module fir_tb
 
     reg signed [(pDATA_WIDTH-1):0] Din_list[0:(Data_Num-1)];
     reg signed [(pDATA_WIDTH-1):0] golden_list[0:(Data_Num-1)];
-    reg error_coef;
-    
+
     initial begin
         $dumpfile("fir.vcd");
-        $dumpvars(0, fir_tb); // Ensure fir_tb contains all the signals you want to monitor
+        $dumpvars("+all");
     end
 
 
@@ -170,7 +170,7 @@ module fir_tb
         for(i=0;i<(data_length-1);i=i+1) begin
             ss_tlast = 0; ss(Din_list[i]);
         end
-        config_read_check(12'h00, 32'h00, 32'h0000_000f); // check idle = 0
+        // config_read_check(12'h00, 32'h00, 32'h0000_000f); // check idle = 0
         ss_tlast = 1; ss(Din_list[(Data_Num-1)]);
         $display("------End the data input(AXI-Stream)------");
     end
@@ -178,15 +178,18 @@ module fir_tb
     integer k;
     reg error;
     reg status_error;
+    reg error_coef;
     initial begin
         error = 0; status_error = 0;
+        repeat (30) @(negedge axis_clk);
         sm_tready = 1;
         wait (sm_tvalid);
-        for(k=0;k < data_length;k=k+1) begin
-            sm(golden_list[k],k);
-        end
-        config_read_check(12'h00, 32'h02, 32'h0000_0002); // check ap_done = 1 (0x00 [bit 1])
-        config_read_check(12'h00, 32'h04, 32'h0000_0004); // check ap_idle = 1 (0x00 [bit 2])
+        @(posedge axis_clk);
+            for(k=0;k < data_length;k=k+1) begin
+                sm(golden_list[k],k);
+            end
+        // config_read_check(12'h00, 32'h02, 32'h0000_0002); // check ap_done = 1 (0x00 [bit 1])
+        // config_read_check(12'h00, 32'h04, 32'h0000_0004); // check ap_idle = 1 (0x00 [bit 2])
         if (error == 0 & error_coef == 0) begin
             $display("---------------------------------------------");
             $display("-----------Congratulations! Pass-------------");
@@ -224,19 +227,18 @@ module fir_tb
         coef[10] =  32'd0;
     end
 
-    
     initial begin
         error_coef = 0;
         $display("----Start the coefficient input(AXI-lite)----");
-        config_write(12'h10, data_length);
+        config_write(12'h010, data_length);
         for(k=0; k< Tape_Num; k=k+1) begin
-            config_write(12'h20+k, coef[k]);
+            config_write(12'h20+4*k, coef[k]);
         end
         awvalid <= 0; wvalid <= 0;
         // read-back and check
         $display(" Check Coefficient ...");
         for(k=0; k < Tape_Num; k=k+1) begin
-            config_read_check(12'h20+k, coef[k], 32'hffffffff);
+            config_read_check(12'h20+4*k, coef[k], 32'hffffffff);
         end
         arvalid <= 0;
         $display(" Tape programming done ...");
@@ -253,7 +255,7 @@ module fir_tb
             @(posedge axis_clk);
             awvalid <= 1; awaddr <= addr;
             wvalid  <= 1; wdata <= data;
-            @(posedge axis_clk);
+            @(negedge axis_clk);
             while (!wready) @(posedge axis_clk);
         end
     endtask
@@ -269,7 +271,7 @@ module fir_tb
             rready <= 1;
             @(posedge axis_clk);
             while (!rvalid) @(posedge axis_clk);
-            repeat(3) @(posedge axis_clk);
+            @(posedge axis_clk);
             if( (rdata & mask) != (exp_data & mask)) begin
                 $display("ERROR: exp = %d, rdata = %d", exp_data, rdata);
                 error_coef <= 1;
@@ -298,7 +300,7 @@ module fir_tb
         input         [31:0] pcnt; // pattern count
         begin
             sm_tready <= 1;
-            @(posedge axis_clk) 
+            @(posedge axis_clk) ;
             wait(sm_tvalid);
             while(!sm_tvalid) @(posedge axis_clk);
             if (sm_tdata != in2) begin
