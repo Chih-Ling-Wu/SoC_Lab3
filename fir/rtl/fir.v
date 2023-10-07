@@ -44,8 +44,14 @@ module fir
     input   wire                     axis_rst_n
 );
 
+reg [10:0] output_count;
 
 // Axilite interfaces //
+
+reg ap_start;
+reg ap_idle;
+reg ap_done;
+reg [(pDATA_WIDTH-1):0] ap_signal;
 
 // Store total length of data
 reg [(pDATA_WIDTH-1):0] data_length;
@@ -58,7 +64,7 @@ assign tap_WE = tap_WE_reg;
 reg [(pDATA_WIDTH-1):0] tap_write;
 assign tap_Di = tap_write;
 reg [(pDATA_WIDTH-1):0] tap_read;
-assign rdata = tap_read;
+assign rdata = araddr == 12'h00 ? ap_signal : tap_read;
 reg [(pADDR_WIDTH-1):0] addr_reg;
 assign tap_A = (addr_reg);
 
@@ -68,16 +74,20 @@ assign wready = wvalid;
 
 always@* begin
     if (awvalid) begin
-        addr_reg = awaddr-12'h20;
-        tap_write = wdata;
-        tap_EN_reg = 1'b1;
-        tap_WE_reg = 4'b1111;
+        if(awaddr != 12'h00) begin
+            addr_reg = awaddr-12'h20;
+            tap_write = wdata;
+            tap_EN_reg = 1'b1;
+            tap_WE_reg = 4'b1111;
+        end
     end 
     else if (arvalid) begin
-        tap_read = tap_Do;
-        tap_EN_reg = 1'b1;
-        tap_WE_reg = 4'b0000;
-        addr_reg = araddr-12'h20; 
+        if(araddr != 12'h00) begin
+            tap_read = tap_Do;
+            tap_EN_reg = 1'b1;
+            tap_WE_reg = 4'b0000;
+            addr_reg = araddr-12'h20; 
+        end
     end 
 end 
 
@@ -89,6 +99,8 @@ always@(posedge axis_clk or negedge axis_rst_n) begin
     end
 end
 
+
+
 // FSM //
 parameter IDLE = 2'd0;
 parameter LOAD = 2'd1;
@@ -99,6 +111,7 @@ reg [1:0] cur_state, next_state;
 reg [3:0] count;
 reg [3:0] count_next;
 reg [10:0] global_count;
+
 
 always@(posedge axis_clk or negedge axis_rst_n) begin
     if (~axis_rst_n) global_count <= 'd0;
@@ -166,6 +179,7 @@ always@* begin
         LOAD : next_state = MAC;
         MAC : begin
             if(count == Tape_Num) next_state = LOAD;
+            // else if(output_count == data_length) next_state = DONE;
             else next_state = MAC;
         end 
         DONE : next_state = DONE;
@@ -256,7 +270,7 @@ always @(posedge axis_clk or negedge axis_rst_n) begin
     else sm_tdata_reg <= (sm_tvalid)? cur_sum : sm_tdata_reg;
 end
 assign sm_tdata = sm_tdata_reg;
-reg [10:0] output_count;
+
 
 always @(posedge axis_clk or negedge axis_rst_n) begin
     if(~axis_rst_n) output_count <= 'd0;
@@ -270,4 +284,40 @@ always @(posedge axis_clk or negedge axis_rst_n) begin
 end
 assign sm_tlast = (cur_state != IDLE) & (output_count == data_length);
 
+reg ap_start_flag;
+always@(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) ap_start_flag <= 1'b0;
+    else begin
+        if(awaddr == 12'h00) ap_start_flag <= 1'b1;
+    end
+end
+
+always@(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) ap_start <= 1'b0;
+    else begin
+        if(awaddr == 12'h00 && ~ap_start_flag) ap_start <= 1'b1;
+        else ap_start <= 1'b0;
+    end
+end
+
+always@(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) ap_done <= 1'b0;
+    else begin
+        if (output_count == data_length & cur_state != IDLE) ap_done <= 1'b1;
+        else ap_done <= ap_done;
+    end
+end
+
+always@(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) ap_idle <= 1'b1;
+    else begin
+        if (output_count == data_length) ap_idle <= 1'b1;
+        else if (ap_start) ap_idle <= 1'b0;
+        else ap_idle <= ap_idle;
+    end
+end
+
+always@* begin
+    ap_signal[31:0] = {29'b0, ap_idle, ap_done, ap_start};
+end
 endmodule
