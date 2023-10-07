@@ -45,29 +45,10 @@ module fir
 );
 
 
-
-reg [(pDATA_WIDTH-1):0] coef_0;
-reg [(pDATA_WIDTH-1):0] coef_1;
-reg [(pDATA_WIDTH-1):0] coef_2;
-reg [(pDATA_WIDTH-1):0] coef_3;
-reg [(pDATA_WIDTH-1):0] coef_4;
-reg [(pDATA_WIDTH-1):0] coef_5;
-reg [(pDATA_WIDTH-1):0] coef_6;
-reg [(pDATA_WIDTH-1):0] coef_7;
-reg [(pDATA_WIDTH-1):0] coef_8;
-reg [(pDATA_WIDTH-1):0] coef_9;
-reg [(pDATA_WIDTH-1):0] coef_10;
-
-
-
-
 // Axilite interfaces //
 
 // Store total length of data
 reg [(pDATA_WIDTH-1):0] data_length;
-
-
-reg [6:0] count;
 
 // Control signals for BRAM
 reg tap_EN_reg;
@@ -85,16 +66,9 @@ assign tap_A = (addr_reg);
 assign rvalid = rready; 
 assign wready = wvalid;
 
-always@(posedge axis_clk or negedge axis_rst_n) begin
-    if(~axis_rst_n) count <= 'd0;
-    else begin
-        if(count <= 'd100) count <= count + 1'b1;
-        else count <= count;
-    end
-end
 always@* begin
     if (awvalid) begin
-        addr_reg = awaddr;
+        addr_reg = awaddr-12'h20;
         tap_write = wdata;
         tap_EN_reg = 1'b1;
         tap_WE_reg = 4'b1111;
@@ -103,49 +77,47 @@ always@* begin
         tap_read = tap_Do;
         tap_EN_reg = 1'b1;
         tap_WE_reg = 4'b0000;
-        addr_reg = araddr; 
+        addr_reg = araddr-12'h20; 
     end 
 end 
 
 always@(posedge axis_clk or negedge axis_rst_n) begin
-    if(~axis_rst_n) begin
-        coef_0 <= 'd0;
-        coef_1 <= 'd0;
-        coef_2 <= 'd0;
-        coef_3 <= 'd0;
-        coef_4 <= 'd0;
-        coef_5 <= 'd0;
-        coef_6 <= 'd0;
-        coef_7 <= 'd0;
-        coef_8 <= 'd0;
-        coef_9 <= 'd0;
-        coef_10 <= 'd0;
-    end
+    if(~axis_rst_n) data_length <= 'd0;
     else begin
-        case (count)
-            'd1 : coef_0 <= wdata;
-            'd2 : coef_1 <= wdata;
-            'd3 : coef_2 <= wdata;
-            'd4 : coef_3 <= wdata;
-            'd5 : coef_4 <= wdata;
-            'd6 : coef_5 <= wdata;
-            'd7 : coef_6 <= wdata;
-            'd8 : coef_7 <= wdata;
-            'd9 : coef_8 <= wdata;
-            'd10 : coef_9 <= wdata;
-            'd11 : coef_10 <= wdata;
-        endcase
+        if(awaddr == 12'h10) data_length <= wdata;
+        else data_length <= data_length;
     end
 end
+
+// FSM //
+parameter IDLE = 2'd0;
+parameter LOAD = 2'd1;
+parameter MAC  = 2'd2;
+parameter DONE  = 2'd3;
+
+reg [1:0] cur_state, next_state;
+reg [3:0] count;
+reg [3:0] count_next;
+reg [10:0] global_count;
+
+always@(posedge axis_clk or negedge axis_rst_n) begin
+    if (~axis_rst_n) global_count <= 'd0;
+    else begin
+        global_count <= global_count <= 'd100 ? global_count + 1'b1 : global_count;
+    end
+end
+
+//////////////////////////////////////
+reg [(pDATA_WIDTH-1):0] coef [Tape_Num-1 : 0];
 integer i;
-reg [(pDATA_WIDTH-1):0] coef [10:0];
+
 always@(posedge axis_clk or negedge axis_rst_n) begin
     if(~axis_rst_n) begin
-        for(i = 0 ;i < 11; i = i + 1)
+        for(i = 0; i < Tape_Num; i = i + 1)
             coef[i] <= 'd0;
     end
     else begin
-        case (count)
+        case (global_count)
             'd1 : coef[0] <= wdata;
             'd2 : coef[1] <= wdata;
             'd3 : coef[2] <= wdata;
@@ -155,21 +127,50 @@ always@(posedge axis_clk or negedge axis_rst_n) begin
             'd7 : coef[6] <= wdata;
             'd8 : coef[7] <= wdata;
             'd9 : coef[8] <= wdata;
-            'd10 : coef[9]  <= wdata;
+            'd10 : coef[9] <= wdata;
             'd11 : coef[10] <= wdata;
         endcase
     end
 end
+
+//////////////////////////////////////////////
+
 always@(posedge axis_clk or negedge axis_rst_n) begin
-    if(~axis_rst_n) data_length <= 'd0;
+    if(~axis_rst_n) cur_state <= IDLE;
+    else cur_state <= next_state;
+end
+
+// counter
+
+always @(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) count <= 'd0;
     else begin
-        if(awvalid) begin
-            if(awaddr == 12'h10) data_length <= wdata;
-        end
-        else data_length <= data_length;
+        case (cur_state)
+            LOAD : begin
+                if(count < Tape_Num - 1) count <= count + 1'b1;
+                else count <= 'd0;
+            end
+            MAC : begin
+                if(count < Tape_Num ) count <= count + 1'b1;
+                else count <= 'd0;
+            end
+            default count <= count;
+        endcase
     end
 end
 
+always@* begin
+    case(cur_state)
+        IDLE : next_state = (global_count >= 'd30)? LOAD : IDLE;
+        // IDLE : next_state = LOAD;
+        LOAD : next_state = (count == Tape_Num - 1) ? MAC  : LOAD;
+        MAC : begin
+            if(count == Tape_Num) next_state = LOAD;
+            else next_state = MAC;
+        end 
+        DONE : next_state = DONE;
+    endcase
+end
 
 
 reg data_EN_reg;
@@ -182,124 +183,84 @@ reg [(pADDR_WIDTH-1):0] data_A_reg;
 assign data_A = data_A_reg;
 
 // stream in input
-reg [10:0] addr_count;
-always @(posedge axis_clk or negedge axis_rst_n) begin
-    if(~axis_rst_n) addr_count <= 'd32;
-    else begin
-        if(count >= 'd50) begin
-            if(addr_count <= 'd41) addr_count <= addr_count + 1'b1;
-            else addr_count <= 'd32;
-        end
-    end
-end
-assign ss_tready = count >= 'd50;
+
+assign ss_tready = (global_count >= 'd30) & (count == 'd0) & (cur_state == LOAD) ? 1'b1 : 1'b0;
+// assign ss_tready = (count == 'd0) & (cur_state == LOAD) ? 1'b1 : 1'b0;
 always@* begin
-    if(ss_tvalid) begin
-        data_write = ss_tdata;
+    if(ss_tready) begin
+        data_A_reg = count << 2;
         data_EN_reg = 1'b1;
         data_WE_reg = 4'b1111;
-        data_A_reg = addr_count;
+        data_write = ss_tdata;
     end
 end
 
 
-// Shift register
-reg [(pDATA_WIDTH-1):0] shift_1;
-reg [(pDATA_WIDTH-1):0] shift_2;
-reg [(pDATA_WIDTH-1):0] shift_3;
-reg [(pDATA_WIDTH-1):0] shift_4;
-reg [(pDATA_WIDTH-1):0] shift_5;
-reg [(pDATA_WIDTH-1):0] shift_6;
-reg [(pDATA_WIDTH-1):0] shift_7;
-reg [(pDATA_WIDTH-1):0] shift_8;
-reg [(pDATA_WIDTH-1):0] shift_9;
-reg [(pDATA_WIDTH-1):0] shift_10;
-reg [(pDATA_WIDTH-1):0] shift_11;
+// one multiplier and one adder for fir //
+wire [(pDATA_WIDTH-1):0] temp;
+wire [(pDATA_WIDTH-1):0] cur_sum;
+reg [(pDATA_WIDTH-1):0] prev_sum;
+reg [(pDATA_WIDTH-1):0] cur_data;
+reg [(pDATA_WIDTH-1):0] cur_coef;
+
+assign temp = cur_data * cur_coef;
+assign cur_sum = prev_sum + temp;
 
 
 
-always @(posedge axis_clk or negedge axis_rst_n) begin
-    if (~axis_rst_n) begin
-        shift_1 <= 'd0;
-        shift_2 <= 'd0;
-        shift_3 <= 'd0;
-        shift_4 <= 'd0;
-        shift_5 <= 'd0;
-        shift_6 <= 'd0;
-        shift_7 <= 'd0;
-        shift_8 <= 'd0;
-        shift_9 <= 'd0;
-        shift_10 <= 'd0;
-        shift_11 <= 'd0;
-    end else begin
-        // Shift data through the register
-        if(count >= 'd51) begin
-            shift_1 <= data_Do;
-            shift_2 <= shift_1;
-            shift_3 <= shift_2;
-            shift_4 <= shift_3;
-            shift_5 <= shift_4;
-            shift_6 <= shift_5;
-            shift_7 <= shift_6;
-            shift_8 <= shift_7;
-            shift_9 <= shift_8;
-            shift_10 <= shift_9;
-            shift_11 <= shift_10;
 
-        end
-    end
-end
-reg [(pDATA_WIDTH-1):0] shift [10:0];
-always @(posedge axis_clk or negedge axis_rst_n) begin
-    if (~axis_rst_n) begin
-        for( i = 0; i < 11; i = i + 1)
+// shift register 
+reg [(pDATA_WIDTH-1):0] shift [Tape_Num - 1 :0];
+
+always@(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) begin
+        for(i = 0; i < Tape_Num; i = i + 1)
             shift[i] <= 'd0;
-    end else begin
-        // Shift data through the register
-        if(count >= 'd51) begin
-            shift[0] <= data_Do;
-            for(i = 1; i < 11; i = i + 1) 
+    end
+    else begin
+        if(cur_state == MAC && count == 'd0) begin
+            for(i = 1 ; i < Tape_Num; i = i + 1) begin
                 shift[i] <= shift[i-1];
-        end
-    end
-end
-
-
-reg [(pDATA_WIDTH-1):0] accumulate_result;
-
-
-
-reg [4:0] mul_count;
-// always @(posedge axis_clk or negedge axis_rst_n) begin
-//     if(~axis_rst_n) mul_count <= 'd0;
-//     else begin
-//         accumulate_result <= shift[0]*coef[0] + shift[1]*coef[1] + shift[2]*coef[2] + shift[3]*coef[3] + shift[4]*coef[4] + shift[5]*coef[5] +shift[6]*coef[6] + shift[7]*coef[7] +shift[8]*coef[8] + shift[9]*coef[9]  + shift[10]*coef[10];
-//     end
-// end
-
-always @(posedge axis_clk or negedge axis_rst_n) begin
-    if (~axis_rst_n) begin
-        mul_count <= 'd0;
-        accumulate_result <= 'd0;
-    end
-    else begin 
-        if(count >= 'd51) begin
-            if (mul_count < 'd10) begin
-                // Use a single multiplier and adder for MAC operation in 11 cycles
-                accumulate_result <= accumulate_result + (shift[mul_count] * coef[mul_count]);
-                mul_count <= mul_count + 1'b1;
-            end 
-            else begin
-                accumulate_result <= 'd0;
-                mul_count <= 'd0;
             end
+            shift[0] <= data_Do;
         end
     end
 end
+always @(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) begin
+        cur_data <= 'd0;
+        prev_sum <= 'd0;
+        cur_coef <= 'd0;
+    end
+    else begin
+        case (cur_state)
+            MAC : begin
+                if(count < 'd11) begin
+                    cur_data <= shift[count];
+                    prev_sum <= cur_sum;
+                    cur_coef <= coef[count];
+                end else begin
+                    cur_data <= cur_data;
+                    prev_sum <= prev_sum;
+                    cur_coef <= cur_coef ;
+                end
+            end
+            default: begin
+                cur_data <= 'd0;
+                prev_sum <= 'd0;
+                cur_coef <= 'd0;
+            end
+        endcase
+    end
+end
 
-assign sm_tvalid = count >= 'd53;
+assign sm_tvalid = ((cur_state == MAC) && (count == 'd11)); 
 reg [(pDATA_WIDTH-1):0] sm_tdata_reg;
-assign sm_tdata = accumulate_result;
+always @(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) sm_tdata_reg <= 'd0;
+    else sm_tdata_reg <= (sm_tvalid)? cur_sum : sm_tdata_reg;
+end
+assign sm_tdata = sm_tdata_reg;
 reg [10:0] output_count;
 
 always @(posedge axis_clk or negedge axis_rst_n) begin
@@ -307,11 +268,11 @@ always @(posedge axis_clk or negedge axis_rst_n) begin
     else begin
         if(sm_tvalid) begin
             if(output_count <= data_length) output_count <= output_count + 1'b1;
-            else output_count <= 'd0;
+            else output_count <= output_count;
         end
     end
     
 end
-assign sm_tlast = (output_count == 'd600);
+assign sm_tlast = (cur_state != IDLE) & (output_count == data_length);
 
 endmodule
