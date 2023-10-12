@@ -44,12 +44,69 @@ module fir
     input   wire                     axis_rst_n
 );
 
-reg [9:0] output_count;
 
+//==============================================//
+//       FSM for data transfer (stream)         //
+//==============================================//
+localparam IDLE = 2'd0;
+localparam LOAD = 2'd1;
+localparam MAC  = 2'd2;
+localparam DONE  = 2'd3;
+
+reg [1:0] cur_state, next_state;
+
+always@(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) cur_state <= IDLE;
+    else cur_state <= next_state;
+end
+
+
+//==============================================//
+//               Global signals                 //
+//==============================================//
+// Store total length of data
+reg [(pDATA_WIDTH-1):0] data_length;
+
+always@(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) data_length <= 'd0;
+    else begin
+        if(awaddr == 12'h10) data_length <= wdata;
+        else data_length <= data_length;
+    end
+end
+
+// counter //
+reg [3:0] count;
+
+always @(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) count <= 'd0;
+    else begin
+        case (cur_state)
+            LOAD : begin
+                count <= 'd0;
+            end
+            MAC : begin
+                if(count < Tape_Num) count <= count + 1'b1;
+                else count <= 'd0;
+            end
+            default count <= count;
+        endcase
+    end
+end
+
+
+//==============================================//
+//              Axi_lite interface              //
+//==============================================//
+
+// address R/W ready handshake
 reg awready_reg;
 reg arready_reg;
+
 assign awready = awready_reg;
 assign arready = arready_reg;
+
+// when address valid == 1, set address ready to 1 in next cycle
 always@(posedge axis_clk or negedge axis_rst_n) begin
     if(~axis_rst_n) begin
         awready_reg <= 'd0;
@@ -60,34 +117,94 @@ always@(posedge axis_clk or negedge axis_rst_n) begin
         arready_reg <= arvalid;
     end
 end
-// Axilite interfaces //
 
+// Return R / W ready hadnshake signal
+assign rvalid = rready; 
+assign wready = wvalid;
+
+// counter for output number
+reg [9:0] output_count;
+
+// ap signals
 reg ap_start;
+reg ap_start_flag;
+
 reg ap_idle;
 reg ap_done;
 reg [(pDATA_WIDTH-1):0] ap_signal;
 
-// Store total length of data
-reg [(pDATA_WIDTH-1):0] data_length;
+// ap_start: generate a one clock pulse when coefficient read is done
+always@(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) ap_start_flag <= 1'b0;
+    else begin
+        if(awaddr == 12'h00) ap_start_flag <= 1'b1;
+    end
+end
+always@(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) ap_start <= 1'b0;
+    else begin
+        if(awaddr == 12'h00 && ~ap_start_flag) ap_start <= 1'b1;
+        else ap_start <= 1'b0;
+    end
+end
+
+
+// ap_done: set to 1 if final output is generated
+always@(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) ap_done <= 1'b0;
+    else begin
+        if (output_count == data_length & cur_state != IDLE) ap_done <= 1'b1;
+        else ap_done <= ap_done;
+    end
+end
+
+// ap_idle: reset when ap_start, set to 1 when final output is generated
+always@(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) ap_idle <= 1'b1;
+    else begin
+        if (output_count == data_length) ap_idle <= 1'b1;
+        else if (ap_start) ap_idle <= 1'b0;
+        else ap_idle <= ap_idle;
+    end
+end
+
+// concatenate all ap signals to ap_signals 
+always@* begin
+    ap_signal[31:0] = {29'b0, ap_idle, ap_done, ap_start};
+end
+
+
 
 // Control signals for BRAM
+
+// BRAM enable 
 reg tap_EN_reg;
 assign tap_EN = tap_EN_reg;
+
+// BRAM write enable 
 reg [3:0]tap_WE_reg;
 assign tap_WE = tap_WE_reg;
+
+// BRAM write data
 reg [(pDATA_WIDTH-1):0] tap_write;
 assign tap_Di = tap_write;
+
+// BRAM read data
 reg [(pDATA_WIDTH-1):0] tap_read;
+
+// if araddr is 12'h00, return ap signals (based on address map)
 assign rdata = araddr == 12'h00 ? ap_signal : tap_read;
+
+// BRAM address
 reg [(pADDR_WIDTH-1):0] addr_reg;
-assign tap_A = (addr_reg);
+assign tap_A = addr_reg;
 
-// Return control signal
-assign rvalid = rready; 
-assign wready = wvalid;
 
+// setting BRAM control signals
 always@* begin
+    // read
     if (rvalid) begin
+        // excluding address 12'h00, since it is ap signal
         if(araddr != 12'h00) begin
             tap_read = tap_Do;
             tap_EN_reg = 1'b1;
@@ -95,6 +212,7 @@ always@* begin
             addr_reg = araddr-12'h20; 
             tap_write = 'd0;
         end
+        // avoid latch !!!!!!!!!!
         else begin
             addr_reg = 'd0;
             tap_read  = 'd0;
@@ -103,7 +221,9 @@ always@* begin
             tap_write = 'd0;
         end
     end 
+    // write
     else begin
+        // excluding address 12'h00, since it is ap signal
         if(awaddr != 12'h00) begin
             addr_reg = awaddr-12'h20;
             tap_write = wdata;
@@ -111,6 +231,7 @@ always@* begin
             tap_WE_reg = 4'b1111;
             tap_read  = 'd0;
         end
+         // avoid latch !!!!!!!!!!
         else begin
             addr_reg = 'd0;
             tap_write = 'd0;
@@ -121,28 +242,12 @@ always@* begin
     end 
 end 
 
-always@(posedge axis_clk or negedge axis_rst_n) begin
-    if(~axis_rst_n) data_length <= 'd0;
-    else begin
-        if(awaddr == 12'h10) data_length <= wdata;
-        else data_length <= data_length;
-    end
-end
 
 
 
-// FSM //
-localparam IDLE = 2'd0;
-localparam LOAD = 2'd1;
-localparam MAC  = 2'd2;
-localparam DONE  = 2'd3;
-
-reg [1:0] cur_state, next_state;
-reg [3:0] count;
-reg [3:0] count_next;
 
 
-//////////////////////////////////////
+
 reg [(pDATA_WIDTH-1):0] coef [Tape_Num-1 : 0];
 integer i;
 always@(posedge axis_clk or negedge axis_rst_n) begin
@@ -169,30 +274,12 @@ always@(posedge axis_clk or negedge axis_rst_n) begin
     end
 end
 
-//////////////////////////////////////////////
 
-always@(posedge axis_clk or negedge axis_rst_n) begin
-    if(~axis_rst_n) cur_state <= IDLE;
-    else cur_state <= next_state;
-end
 
-// counter
 
-always @(posedge axis_clk or negedge axis_rst_n) begin
-    if(~axis_rst_n) count <= 'd0;
-    else begin
-        case (cur_state)
-            LOAD : begin
-                count <= 'd0;
-            end
-            MAC : begin
-                if(count < Tape_Num) count <= count + 1'b1;
-                else count <= 'd0;
-            end
-            default count <= count;
-        endcase
-    end
-end
+
+
+
 
 always@* begin
     case(cur_state)
@@ -310,40 +397,4 @@ always @(posedge axis_clk or negedge axis_rst_n) begin
 end
 assign sm_tlast = (cur_state != IDLE) & (output_count == data_length);
 
-reg ap_start_flag;
-always@(posedge axis_clk or negedge axis_rst_n) begin
-    if(~axis_rst_n) ap_start_flag <= 1'b0;
-    else begin
-        if(awaddr == 12'h00) ap_start_flag <= 1'b1;
-    end
-end
-
-always@(posedge axis_clk or negedge axis_rst_n) begin
-    if(~axis_rst_n) ap_start <= 1'b0;
-    else begin
-        if(awaddr == 12'h00 && ~ap_start_flag) ap_start <= 1'b1;
-        else ap_start <= 1'b0;
-    end
-end
-
-always@(posedge axis_clk or negedge axis_rst_n) begin
-    if(~axis_rst_n) ap_done <= 1'b0;
-    else begin
-        if (output_count == data_length & cur_state != IDLE) ap_done <= 1'b1;
-        else ap_done <= ap_done;
-    end
-end
-
-always@(posedge axis_clk or negedge axis_rst_n) begin
-    if(~axis_rst_n) ap_idle <= 1'b1;
-    else begin
-        if (output_count == data_length) ap_idle <= 1'b1;
-        else if (ap_start) ap_idle <= 1'b0;
-        else ap_idle <= ap_idle;
-    end
-end
-
-always@* begin
-    ap_signal[31:0] = {29'b0, ap_idle, ap_done, ap_start};
-end
 endmodule
