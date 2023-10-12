@@ -46,6 +46,20 @@ module fir
 
 reg [10:0] output_count;
 
+reg awready_reg;
+reg arready_reg;
+assign awready = awready_reg;
+assign arready = arready_reg;
+always@(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) begin
+        awready_reg <= 'd0;
+        arready_reg <= 'd0;
+    end
+    else begin
+        awready_reg <= awvalid;
+        arready_reg <= arvalid;
+    end
+end
 // Axilite interfaces //
 
 reg ap_start;
@@ -125,10 +139,10 @@ end
 
 
 // FSM //
-parameter IDLE = 2'd0;
-parameter LOAD = 2'd1;
-parameter MAC  = 2'd2;
-parameter DONE  = 2'd3;
+localparam IDLE = 2'd0;
+localparam LOAD = 2'd1;
+localparam MAC  = 2'd2;
+localparam DONE  = 2'd3;
 
 reg [1:0] cur_state, next_state;
 reg [3:0] count;
@@ -221,10 +235,10 @@ assign data_A = data_A_reg;
 
 // stream in input
 
-assign ss_tready = (count == 'd0) & (cur_state == LOAD) | ((cur_state == IDLE) & (next_state == LOAD))? 1'b1 : 1'b0;
+assign ss_tready = ss_tvalid & (count == 'd0) & (cur_state == LOAD) | ((cur_state == IDLE) & (next_state == LOAD))? 1'b1 : 1'b0;
 // assign ss_tready = (count == 'd0) & (cur_state == LOAD) ? 1'b1 : 1'b0;
 always@* begin
-    if(ss_tready) begin
+    if(ss_tready | ss_tlast) begin
         data_A_reg = count << 2;
         data_EN_reg = 1'b1;
         data_WE_reg = 4'b1111;
@@ -248,8 +262,6 @@ reg [(pDATA_WIDTH-1):0] cur_coef;
 
 assign temp = cur_data * cur_coef;
 assign cur_sum = prev_sum + temp;
-
-
 
 
 // shift register 
@@ -292,7 +304,7 @@ always @(posedge axis_clk or negedge axis_rst_n) begin
     end
 end
 
-assign sm_tvalid = ((cur_state == MAC) && (count == 'd11)); 
+assign sm_tvalid = ((cur_state == MAC) && (count == 'd11)) & sm_tready; 
 reg [(pDATA_WIDTH-1):0] sm_tdata_reg;
 always @(posedge axis_clk or negedge axis_rst_n) begin
     if(~axis_rst_n) sm_tdata_reg <= 'd0;
@@ -305,7 +317,7 @@ always @(posedge axis_clk or negedge axis_rst_n) begin
     if(~axis_rst_n) output_count <= 'd0;
     else begin
         if(sm_tvalid) begin
-            if(output_count <= data_length) output_count <= output_count + 1'b1;
+            if(output_count <= data_length - 1) output_count <= output_count + 1'b1;
             else output_count <= output_count;
         end
     end
