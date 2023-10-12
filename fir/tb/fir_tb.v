@@ -45,13 +45,26 @@ module fir
 );
 
 
+// counter //
+reg [3:0] count;
+
+// counter for output number
+reg [9:0] output_count;
+
+// Store total length of data
+reg [(pDATA_WIDTH-1):0] data_length;
+
+
+// ap signals
+reg ap_start;
+
 //==============================================//
 //       FSM for data transfer (stream)         //
 //==============================================//
-localparam IDLE = 2'd0;
-localparam LOAD = 2'd1;
-localparam MAC  = 2'd2;
-localparam DONE  = 2'd3;
+localparam IDLE = 2'd0;  // still reading coefficient
+localparam LOAD = 2'd1;  // load in input (1 input for 1 cycle)
+localparam MAC  = 2'd2;  // Computing (11 cycles)
+localparam DONE  = 2'd3; // all done
 
 reg [1:0] cur_state, next_state;
 
@@ -60,13 +73,20 @@ always@(posedge axis_clk or negedge axis_rst_n) begin
     else cur_state <= next_state;
 end
 
+always@* begin
+    case(cur_state)
+        IDLE : next_state = (ap_start)? LOAD : IDLE;
+        LOAD : next_state = MAC;
+        MAC : begin
+            if(count == Tape_Num) next_state = LOAD;
+            else if(ss_tlast & output_count == data_length + 1'b1) next_state = DONE;
+            else next_state = MAC;
+        end 
+        DONE : next_state = DONE;
+    endcase
+end
 
-//==============================================//
-//               Global signals                 //
-//==============================================//
-// Store total length of data
-reg [(pDATA_WIDTH-1):0] data_length;
-
+// counter and data length assignment
 always@(posedge axis_clk or negedge axis_rst_n) begin
     if(~axis_rst_n) data_length <= 'd0;
     else begin
@@ -75,16 +95,12 @@ always@(posedge axis_clk or negedge axis_rst_n) begin
     end
 end
 
-// counter //
-reg [3:0] count;
 
 always @(posedge axis_clk or negedge axis_rst_n) begin
     if(~axis_rst_n) count <= 'd0;
     else begin
         case (cur_state)
-            LOAD : begin
-                count <= 'd0;
-            end
+            LOAD : count <= 'd0;
             MAC : begin
                 if(count < Tape_Num) count <= count + 1'b1;
                 else count <= 'd0;
@@ -122,11 +138,8 @@ end
 assign rvalid = rready; 
 assign wready = wvalid;
 
-// counter for output number
-reg [9:0] output_count;
 
 // ap signals
-reg ap_start;
 reg ap_start_flag;
 
 reg ap_idle;
@@ -242,12 +255,7 @@ always@* begin
     end 
 end 
 
-
-
-
-
-
-
+// store coefficient to local registers when reading back to tb
 reg [(pDATA_WIDTH-1):0] coef [Tape_Num-1 : 0];
 integer i;
 always@(posedge axis_clk or negedge axis_rst_n) begin
@@ -263,7 +271,7 @@ always@(posedge axis_clk or negedge axis_rst_n) begin
                 12'h28 : coef[2] <= tap_Do;
                 12'h2c : coef[3] <= tap_Do;
                 12'h30 : coef[4] <= tap_Do;
-                12'h34: coef[5] <= tap_Do;
+                12'h34 : coef[5] <= tap_Do;
                 12'h38 : coef[6] <= tap_Do;
                 12'h3c : coef[7] <= tap_Do;
                 12'h40 : coef[8] <= tap_Do;
@@ -276,40 +284,34 @@ end
 
 
 
+//==============================================//
+//               Stream interface               //
+//==============================================//
 
 
 
+// set ss_tready handshake signals (ready to receive data)
+assign ss_tready = (ss_tvalid) & ((cur_state == LOAD) | ((cur_state == IDLE) & (next_state == LOAD)))? 1'b1 : 1'b0;
 
+// Control signals for BRAM
 
-always@* begin
-    case(cur_state)
-        IDLE : next_state = (ap_start)? LOAD : IDLE;
-        // IDLE : next_state = LOAD;
-        // LOAD : next_state = (count == Tape_Num - 1) ? MAC  : LOAD;
-        LOAD : next_state = MAC;
-        MAC : begin
-            if(count == Tape_Num) next_state = LOAD;
-            else if(ss_tlast && output_count == data_length + 1'b1) next_state = DONE;
-            else next_state = MAC;
-        end 
-        DONE : next_state = DONE;
-    endcase
-end
-
-
+// BRAM enable 
 reg data_EN_reg;
 assign data_EN = data_EN_reg;
+
+// BRAM write
 reg [3:0]data_WE_reg;
 assign data_WE = data_WE_reg;
+
+// BRAM write data
 reg [(pDATA_WIDTH-1):0] data_write;
 assign data_Di = data_write;
+
+// BRAM address
 reg [(pADDR_WIDTH-1):0] data_A_reg;
 assign data_A = data_A_reg;
 
-// stream in input
-
-assign ss_tready = ss_tvalid & ((cur_state == LOAD) | ((cur_state == IDLE) & (next_state == LOAD)))? 1'b1 : 1'b0;
-// assign ss_tready = (count == 'd0) & (cur_state == LOAD) ? 1'b1 : 1'b0;
+// setting data BRAM control signals
 always@* begin
     if(ss_tready) begin
         data_A_reg = count << 2;
@@ -317,6 +319,7 @@ always@* begin
         data_WE_reg = 4'b1111;
         data_write = ss_tdata;
     end
+    // avoid latch !!!!!!!!!!!
     else begin
         data_A_reg ='d0;
         data_EN_reg = 'd0;
@@ -340,13 +343,13 @@ assign cur_sum = prev_sum + temp;
 // shift register 
 reg [(pDATA_WIDTH-1):0] shift [Tape_Num - 1 :0];
 
+// when currrent state is LOAD, load in one input and shift all registers
 always@(posedge axis_clk or negedge axis_rst_n) begin
     if(~axis_rst_n) begin
         for(i = 0; i < Tape_Num; i = i + 1)
             shift[i] <= 'd0;
     end
     else begin
-        // if(cur_state == MAC && count == 'd1) begin
         if(cur_state == LOAD) begin
             for(i = 1 ; i < Tape_Num; i = i + 1) begin
                 shift[i] <= shift[i-1];
@@ -355,6 +358,8 @@ always@(posedge axis_clk or negedge axis_rst_n) begin
         end 
     end
 end
+
+// fir computing: one multiplication and one add in one cycle //
 always @(posedge axis_clk or negedge axis_rst_n) begin
     if(~axis_rst_n) begin
         cur_data <= 'd0;
@@ -377,15 +382,21 @@ always @(posedge axis_clk or negedge axis_rst_n) begin
     end
 end
 
+
+// set sm_tvalid handshake signals (valid for sending back outputdata, 11 cycles for one output)
 assign sm_tvalid = ((cur_state == MAC) && (count == 'd11)) & sm_tready; 
+
+// sm_tdata: output data to send back
 reg [(pDATA_WIDTH-1):0] sm_tdata_reg;
+
 always @(posedge axis_clk or negedge axis_rst_n) begin
     if(~axis_rst_n) sm_tdata_reg <= 'd0;
     else sm_tdata_reg <= (sm_tvalid)? cur_sum : sm_tdata_reg;
 end
+
 assign sm_tdata = sm_tdata_reg;
 
-
+// output counter
 always @(posedge axis_clk or negedge axis_rst_n) begin
     if(~axis_rst_n) output_count <= 'd0;
     else begin
@@ -395,6 +406,8 @@ always @(posedge axis_clk or negedge axis_rst_n) begin
     end
     
 end
-assign sm_tlast = (cur_state != IDLE) & (output_count == data_length);
+
+// sm_tlast
+assign sm_tlast = (cur_state == DONE);
 
 endmodule
