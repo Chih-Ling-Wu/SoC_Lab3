@@ -44,7 +44,7 @@ module fir
     input   wire                     axis_rst_n
 );
 
-reg [10:0] output_count;
+reg [9:0] output_count;
 
 reg awready_reg;
 reg arready_reg;
@@ -87,23 +87,7 @@ assign rvalid = rready;
 assign wready = wvalid;
 
 always@* begin
-    if (awvalid) begin
-        if(awaddr != 12'h00) begin
-            addr_reg = awaddr-12'h20;
-            tap_write = wdata;
-            tap_EN_reg = 1'b1;
-            tap_WE_reg = 4'b1111;
-            tap_read  = 'd0;
-        end
-        else begin
-            addr_reg = 'd0;
-            tap_write = 'd0;
-            tap_EN_reg = 'd0;
-            tap_WE_reg = 'd0;
-            tap_read  = 'd0;
-        end
-    end 
-    else if (arvalid) begin
+    if (rvalid) begin
         if(araddr != 12'h00) begin
             tap_read = tap_Do;
             tap_EN_reg = 1'b1;
@@ -119,7 +103,22 @@ always@* begin
             tap_write = 'd0;
         end
     end 
-
+    else begin
+        if(awaddr != 12'h00) begin
+            addr_reg = awaddr-12'h20;
+            tap_write = wdata;
+            tap_EN_reg = 1'b1;
+            tap_WE_reg = 4'b1111;
+            tap_read  = 'd0;
+        end
+        else begin
+            addr_reg = 'd0;
+            tap_write = 'd0;
+            tap_EN_reg = 'd0;
+            tap_WE_reg = 'd0;
+            tap_read  = 'd0;
+        end
+    end 
 end 
 
 always@(posedge axis_clk or negedge axis_rst_n) begin
@@ -146,27 +145,27 @@ reg [3:0] count_next;
 //////////////////////////////////////
 reg [(pDATA_WIDTH-1):0] coef [Tape_Num-1 : 0];
 integer i;
-reg [(pDATA_WIDTH-1):0] flag;
 always@(posedge axis_clk or negedge axis_rst_n) begin
     if(~axis_rst_n) begin
-        flag <= 'd0;
         for(i = 0; i < Tape_Num; i = i + 1)
             coef[i] <= 'd0;
     end
     else begin
-        case (araddr)
-            12'h20 : coef[0] <= tap_Do;
-            12'h24 : coef[1] <= tap_Do;
-            12'h28 : coef[2] <= tap_Do;
-            12'h2c : coef[3] <= tap_Do;
-            12'h30 : coef[4] <= tap_Do;
-            12'h34: coef[5] <= tap_Do;
-            12'h38 : coef[6] <= tap_Do;
-            12'h3c : coef[7] <= tap_Do;
-            12'h40 : coef[8] <= tap_Do;
-            12'h44 : coef[9] <= tap_Do;
-            12'h48 : coef[10] <= tap_Do;
-        endcase
+        if(cur_state == IDLE) begin
+            case (araddr)
+                12'h20 : coef[0] <= tap_Do;
+                12'h24 : coef[1] <= tap_Do;
+                12'h28 : coef[2] <= tap_Do;
+                12'h2c : coef[3] <= tap_Do;
+                12'h30 : coef[4] <= tap_Do;
+                12'h34: coef[5] <= tap_Do;
+                12'h38 : coef[6] <= tap_Do;
+                12'h3c : coef[7] <= tap_Do;
+                12'h40 : coef[8] <= tap_Do;
+                12'h44 : coef[9] <= tap_Do;
+                12'h48 : coef[10] <= tap_Do;
+            endcase
+        end
     end
 end
 
@@ -203,7 +202,7 @@ always@* begin
         LOAD : next_state = MAC;
         MAC : begin
             if(count == Tape_Num) next_state = LOAD;
-            // else if(output_count == data_length) next_state = DONE;
+            else if(ss_tlast && output_count == data_length + 1'b1) next_state = DONE;
             else next_state = MAC;
         end 
         DONE : next_state = DONE;
@@ -222,7 +221,7 @@ assign data_A = data_A_reg;
 
 // stream in input
 
-assign ss_tready = ss_tvalid & (count == 'd0) & (cur_state == LOAD) | ((cur_state == IDLE) & (next_state == LOAD))? 1'b1 : 1'b0;
+assign ss_tready = ss_tvalid & ((cur_state == LOAD) | ((cur_state == IDLE) & (next_state == LOAD)))? 1'b1 : 1'b0;
 // assign ss_tready = (count == 'd0) & (cur_state == LOAD) ? 1'b1 : 1'b0;
 always@* begin
     if(ss_tready) begin
@@ -304,8 +303,7 @@ always @(posedge axis_clk or negedge axis_rst_n) begin
     if(~axis_rst_n) output_count <= 'd0;
     else begin
         if(sm_tvalid) begin
-            if(output_count <= data_length - 1) output_count <= output_count + 1'b1;
-            else output_count <= output_count;
+            output_count <= output_count + 1'b1;
         end
     end
     
