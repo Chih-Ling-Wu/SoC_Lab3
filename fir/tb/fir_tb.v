@@ -1,316 +1,351 @@
 `timescale 1ns / 1ps
-//////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date: 08/20/2023 10:38:55 AM
-// Design Name: 
-// Module Name: fir_tb
-// Project Name: 
-// Target Devices: 
-// Tool Versions: 
-// Description: 
-// 
-// Dependencies: 
-// 
-// Revision:
-// Revision 0.01 - File Created
-// Additional Comments:
-// 
-//////////////////////////////////////////////////////////////////////////////////
-
-`include "../bram/bram11.v"
-
-module fir_tb
+module fir 
 #(  parameter pADDR_WIDTH = 12,
     parameter pDATA_WIDTH = 32,
-    parameter Tape_Num    = 11,
-    parameter Data_Num    = 600
-)();
-    wire                        awready;
-    wire                        wready;
-    reg                         awvalid;
-    reg   [(pADDR_WIDTH-1): 0]  awaddr;
-    reg                         wvalid;
-    reg signed [(pDATA_WIDTH-1) : 0] wdata;
-    wire                        arready;
-    reg                         rready;
-    reg                         arvalid;
-    reg         [(pADDR_WIDTH-1): 0] araddr;
-    wire                        rvalid;
-    wire signed [(pDATA_WIDTH-1): 0] rdata;
-    reg                         ss_tvalid;
-    reg signed [(pDATA_WIDTH-1) : 0] ss_tdata;
-    reg                         ss_tlast;
-    wire                        ss_tready;
-    reg                         sm_tready;
-    wire                        sm_tvalid;
-    wire signed [(pDATA_WIDTH-1) : 0] sm_tdata;
-    wire                        sm_tlast;
-    reg                         axis_clk;
-    reg                         axis_rst_n;
-
-// ram for tap
-    wire [3:0]               tap_WE;
-    wire                     tap_EN;
-    wire [(pDATA_WIDTH-1):0] tap_Di;
-    wire [(pADDR_WIDTH-1):0] tap_A;
-    wire [(pDATA_WIDTH-1):0] tap_Do;
-
-// ram for data RAM
-    wire [3:0]               data_WE;
-    wire                     data_EN;
-    wire [(pDATA_WIDTH-1):0] data_Di;
-    wire [(pADDR_WIDTH-1):0] data_A;
-    wire [(pDATA_WIDTH-1):0] data_Do;
-
-
-
-    fir fir_DUT(
-        .awready(awready),
-        .wready(wready),
-        .awvalid(awvalid),
-        .awaddr(awaddr),
-        .wvalid(wvalid),
-        .wdata(wdata),
-        .arready(arready),
-        .rready(rready),
-        .arvalid(arvalid),
-        .araddr(araddr),
-        .rvalid(rvalid),
-        .rdata(rdata),
-        .ss_tvalid(ss_tvalid),
-        .ss_tdata(ss_tdata),
-        .ss_tlast(ss_tlast),
-        .ss_tready(ss_tready),
-        .sm_tready(sm_tready),
-        .sm_tvalid(sm_tvalid),
-        .sm_tdata(sm_tdata),
-        .sm_tlast(sm_tlast),
-
-        // ram for tap
-        .tap_WE(tap_WE),
-        .tap_EN(tap_EN),
-        .tap_Di(tap_Di),
-        .tap_A(tap_A),
-        .tap_Do(tap_Do),
-
-        // ram for data
-        .data_WE(data_WE),
-        .data_EN(data_EN),
-        .data_Di(data_Di),
-        .data_A(data_A),
-        .data_Do(data_Do),
-
-        .axis_clk(axis_clk),
-        .axis_rst_n(axis_rst_n)
-
-        );
+    parameter Tape_Num    = 11
+)
+(
+    output  wire                     awready,
+    output  wire                     wready,
+    input   wire                     awvalid,
+    input   wire [(pADDR_WIDTH-1):0] awaddr,
+    input   wire                     wvalid,
+    input   wire [(pDATA_WIDTH-1):0] wdata,
+    output  wire                     arready,
+    input   wire                     rready,
+    input   wire                     arvalid,
+    input   wire [(pADDR_WIDTH-1):0] araddr,
+    output  wire                     rvalid,
+    output  wire [(pDATA_WIDTH-1):0] rdata,    
+    input   wire                     ss_tvalid, 
+    input   wire [(pDATA_WIDTH-1):0] ss_tdata, 
+    input   wire                     ss_tlast, 
+    output  wire                     ss_tready, 
+    input   wire                     sm_tready, 
+    output  wire                     sm_tvalid, 
+    output  wire [(pDATA_WIDTH-1):0] sm_tdata, 
+    output  wire                     sm_tlast, 
     
-    // RAM for tap
-    bram11 tap_RAM (
-        .CLK(axis_clk),
-        .WE(tap_WE),
-        .EN(tap_EN),
-        .Di(tap_Di),
-        .A(tap_A),
-        .Do(tap_Do)
-    );
+    // bram for tap RAM
+    output  wire [3:0]               tap_WE,
+    output  wire                     tap_EN,
+    output  wire [(pDATA_WIDTH-1):0] tap_Di,
+    output  wire [(pADDR_WIDTH-1):0] tap_A,
+    input   wire [(pDATA_WIDTH-1):0] tap_Do,
 
-    // RAM for data: choose bram11 or bram12
-    bram11 data_RAM(
-        .CLK(axis_clk),
-        .WE(data_WE),
-        .EN(data_EN),
-        .Di(data_Di),
-        .A(data_A),
-        .Do(data_Do)
-    );
+    // bram for data RAM
+    output  wire [3:0]               data_WE,
+    output  wire                     data_EN,
+    output  wire [(pDATA_WIDTH-1):0] data_Di,
+    output  wire [(pADDR_WIDTH-1):0] data_A,
+    input   wire [(pDATA_WIDTH-1):0] data_Do,
 
-    reg signed [(pDATA_WIDTH-1):0] Din_list[0:(Data_Num-1)];
-    reg signed [(pDATA_WIDTH-1):0] golden_list[0:(Data_Num-1)];
+    input   wire                     axis_clk,
+    input   wire                     axis_rst_n
+);
 
-    initial begin
-        $dumpfile("fir.vcd");
-        $dumpvars("+all");
+reg [10:0] output_count;
+
+reg awready_reg;
+reg arready_reg;
+assign awready = awready_reg;
+assign arready = arready_reg;
+always@(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) begin
+        awready_reg <= 'd0;
+        arready_reg <= 'd0;
     end
-
-
-    initial begin
-        axis_clk = 0;
-        forever begin
-            #5 axis_clk = (~axis_clk);
-        end
+    else begin
+        awready_reg <= awvalid;
+        arready_reg <= arvalid;
     end
+end
+// Axilite interfaces //
 
-    initial begin
-        axis_rst_n = 0;
-        @(posedge axis_clk); @(posedge axis_clk);
-        axis_rst_n = 1;
-    end
+reg ap_start;
+reg ap_idle;
+reg ap_done;
+reg [(pDATA_WIDTH-1):0] ap_signal;
 
-    reg [31:0]  data_length;
-    integer Din, golden, input_data, golden_data, m;
-    initial begin
-        data_length = 0;
-        Din = $fopen("./samples_triangular_wave.dat","r");
-        golden = $fopen("./out_gold.dat","r");
-        for(m=0;m<Data_Num;m=m+1) begin
-            input_data = $fscanf(Din,"%d", Din_list[m]);
-            golden_data = $fscanf(golden,"%d", golden_list[m]);
-            data_length = data_length + 1;
-        end
-    end
+// Store total length of data
+reg [(pDATA_WIDTH-1):0] data_length;
 
-    integer i;
-    initial begin
-        $display("------------Start simulation-----------");
-        ss_tvalid = 0;
-        $display("----Start the data input(AXI-Stream)----");
-        for(i=0;i<(data_length-1);i=i+1) begin
-            ss_tlast = 0; ss(Din_list[i]);
-        end
-        config_read_check(12'h00, 32'h00, 32'h0000_000f); // check idle = 0
-        ss_tlast = 1; ss(Din_list[(Data_Num-1)]);
-        $display("------End the data input(AXI-Stream)------");
-    end
+// Control signals for BRAM
+reg tap_EN_reg;
+assign tap_EN = tap_EN_reg;
+reg [3:0]tap_WE_reg;
+assign tap_WE = tap_WE_reg;
+reg [(pDATA_WIDTH-1):0] tap_write;
+assign tap_Di = tap_write;
+reg [(pDATA_WIDTH-1):0] tap_read;
+assign rdata = araddr == 12'h00 ? ap_signal : tap_read;
+reg [(pADDR_WIDTH-1):0] addr_reg;
+assign tap_A = (addr_reg);
 
-    integer k;
-    reg error;
-    reg status_error;
-    reg error_coef;
-    initial begin
-        error = 0; status_error = 0;
-        repeat (50) @(negedge axis_clk);
-        sm_tready = 1;
-        wait (sm_tvalid);
-        @(posedge axis_clk);
-            for(k=0;k < data_length;k=k+1) begin
-                sm(golden_list[k],k);
-            end
-        config_read_check(12'h00, 32'h02, 32'h0000_0002); // check ap_done = 1 (0x00 [bit 1])
-        config_read_check(12'h00, 32'h04, 32'h0000_0004); // check ap_idle = 1 (0x00 [bit 2])
-        if (error == 0 & error_coef == 0) begin
-            $display("---------------------------------------------");
-            $display("-----------Congratulations! Pass-------------");
+// Return control signal
+assign rvalid = rready; 
+assign wready = wvalid;
+
+always@* begin
+    if (awvalid) begin
+        if(awaddr != 12'h00) begin
+            addr_reg = awaddr-12'h20;
+            tap_write = wdata;
+            tap_EN_reg = 1'b1;
+            tap_WE_reg = 4'b1111;
+            tap_read  = 'd0;
         end
         else begin
-            $display("--------Simulation Failed---------");
+            addr_reg = 'd0;
+            tap_write = 'd0;
+            tap_EN_reg = 'd0;
+            tap_WE_reg = 'd0;
+            tap_read  = 'd0;
         end
-        $finish;
+    end 
+    else if (arvalid) begin
+        if(araddr != 12'h00) begin
+            tap_read = tap_Do;
+            tap_EN_reg = 1'b1;
+            tap_WE_reg = 4'b0000;
+            addr_reg = araddr-12'h20; 
+            tap_write = 'd0;
+        end
+        else begin
+            addr_reg = 'd0;
+            tap_read  = 'd0;
+            tap_EN_reg = 'd0;
+            tap_WE_reg = 'd0;
+            tap_write = 'd0;
+        end
+    end 
+
+end 
+
+always@(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) data_length <= 'd0;
+    else begin
+        if(awaddr == 12'h10) data_length <= wdata;
+        else data_length <= data_length;
     end
+end
 
-    // Prevent hang
-    integer timeout = (1000000);
-    initial begin
-        while(timeout > 0) begin
-            @(posedge axis_clk);
-            timeout = timeout - 1;
-        end
-        $display($time, "Simualtion Hang ....");
-        $finish;
+
+
+// FSM //
+localparam IDLE = 2'd0;
+localparam LOAD = 2'd1;
+localparam MAC  = 2'd2;
+localparam DONE  = 2'd3;
+
+reg [1:0] cur_state, next_state;
+reg [3:0] count;
+reg [3:0] count_next;
+
+
+//////////////////////////////////////
+reg [(pDATA_WIDTH-1):0] coef [Tape_Num-1 : 0];
+integer i;
+reg [(pDATA_WIDTH-1):0] flag;
+always@(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) begin
+        flag <= 'd0;
+        for(i = 0; i < Tape_Num; i = i + 1)
+            coef[i] <= 'd0;
     end
-
-
-    reg signed [31:0] coef[0:10]; // fill in coef 
-    initial begin
-        coef[0]  =  32'd0;
-        coef[1]  = -32'd10;
-        coef[2]  = -32'd9;
-        coef[3]  =  32'd23;
-        coef[4]  =  32'd56;
-        coef[5]  =  32'd63;
-        coef[6]  =  32'd56;
-        coef[7]  =  32'd23;
-        coef[8]  = -32'd9;
-        coef[9]  = -32'd10;
-        coef[10] =  32'd0;
+    else begin
+        case (araddr)
+            12'h20 : coef[0] <= tap_Do;
+            12'h24 : coef[1] <= tap_Do;
+            12'h28 : coef[2] <= tap_Do;
+            12'h2c : coef[3] <= tap_Do;
+            12'h30 : coef[4] <= tap_Do;
+            12'h34: coef[5] <= tap_Do;
+            12'h38 : coef[6] <= tap_Do;
+            12'h3c : coef[7] <= tap_Do;
+            12'h40 : coef[8] <= tap_Do;
+            12'h44 : coef[9] <= tap_Do;
+            12'h48 : coef[10] <= tap_Do;
+        endcase
     end
+end
 
-    initial begin
-        error_coef = 0;
-        $display("----Start the coefficient input(AXI-lite)----");
-        config_write(12'h010, data_length);
-        for(k=0; k< Tape_Num; k=k+1) begin
-            config_write(12'h20+4*k, coef[k]);
-        end
-        awvalid <= 0; wvalid <= 0;
-        // read-back and check
-        $display(" Check Coefficient ...");
-        for(k=0; k < Tape_Num; k=k+1) begin
-            config_read_check(12'h20+4*k, coef[k], 32'hffffffff);
-        end
-        arvalid <= 0;
-        $display(" Tape programming done ...");
-        $display(" Start FIR");
-        @(posedge axis_clk) config_write(12'h00, 32'h0000_0001);    // ap_start = 1
-        $display("----End the coefficient input(AXI-lite)----");
+//////////////////////////////////////////////
+
+always@(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) cur_state <= IDLE;
+    else cur_state <= next_state;
+end
+
+// counter
+
+always @(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) count <= 'd0;
+    else begin
+        case (cur_state)
+            LOAD : begin
+                count <= 'd0;
+            end
+            MAC : begin
+                if(count < Tape_Num) count <= count + 1'b1;
+                else count <= 'd0;
+            end
+            default count <= count;
+        endcase
     end
+end
 
-    task config_write;
-        input [11:0]    addr;
-        input [31:0]    data;
-        begin
-            awvalid <= 0; wvalid <= 0;
-            @(posedge axis_clk);
-            awvalid <= 1; awaddr <= addr;
-            wvalid  <= 1; wdata <= data;
-            @(negedge axis_clk);
-            while (!wready) @(posedge axis_clk);
-        end
-    endtask
+always@* begin
+    case(cur_state)
+        IDLE : next_state = (ap_start)? LOAD : IDLE;
+        // IDLE : next_state = LOAD;
+        // LOAD : next_state = (count == Tape_Num - 1) ? MAC  : LOAD;
+        LOAD : next_state = MAC;
+        MAC : begin
+            if(count == Tape_Num) next_state = LOAD;
+            // else if(output_count == data_length) next_state = DONE;
+            else next_state = MAC;
+        end 
+        DONE : next_state = DONE;
+    endcase
+end
 
-    task config_read_check;
-        input [11:0]        addr;
-        input signed [31:0] exp_data;
-        input [31:0]        mask;
-        begin
-            arvalid <= 0;
-            @(posedge axis_clk);
-            arvalid <= 1; araddr <= addr;
-            rready <= 1;
-            @(posedge axis_clk);
-            while (!rvalid) @(posedge axis_clk);
-            @(posedge axis_clk);
-            if( (rdata & mask) != (exp_data & mask)) begin
-                $display("ERROR: exp = %d, rdata = %d", exp_data, rdata);
-                error_coef <= 1;
-            end else begin
-                $display("OK: exp = %d, rdata = %d", exp_data, rdata);
+
+reg data_EN_reg;
+assign data_EN = data_EN_reg;
+reg [3:0]data_WE_reg;
+assign data_WE = data_WE_reg;
+reg [(pDATA_WIDTH-1):0] data_write;
+assign data_Di = data_write;
+reg [(pADDR_WIDTH-1):0] data_A_reg;
+assign data_A = data_A_reg;
+
+// stream in input
+
+assign ss_tready = ss_tvalid & (count == 'd0) & (cur_state == LOAD) | ((cur_state == IDLE) & (next_state == LOAD))? 1'b1 : 1'b0;
+// assign ss_tready = (count == 'd0) & (cur_state == LOAD) ? 1'b1 : 1'b0;
+always@* begin
+    if(ss_tready) begin
+        data_A_reg = count << 2;
+        data_EN_reg = 1'b1;
+        data_WE_reg = 4'b1111;
+        data_write = ss_tdata;
+    end
+    else begin
+        data_A_reg ='d0;
+        data_EN_reg = 'd0;
+        data_WE_reg = 'd0;
+        data_write = 'd0;
+    end
+end
+
+
+// one multiplier and one adder for fir //
+wire [(pDATA_WIDTH-1):0] temp;
+wire [(pDATA_WIDTH-1):0] cur_sum;
+reg [(pDATA_WIDTH-1):0] prev_sum;
+reg [(pDATA_WIDTH-1):0] cur_data;
+reg [(pDATA_WIDTH-1):0] cur_coef;
+
+assign temp = cur_data * cur_coef;
+assign cur_sum = prev_sum + temp;
+
+
+// shift register 
+reg [(pDATA_WIDTH-1):0] shift [Tape_Num - 1 :0];
+
+always@(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) begin
+        for(i = 0; i < Tape_Num; i = i + 1)
+            shift[i] <= 'd0;
+    end
+    else begin
+        // if(cur_state == MAC && count == 'd1) begin
+        if(cur_state == LOAD) begin
+            for(i = 1 ; i < Tape_Num; i = i + 1) begin
+                shift[i] <= shift[i-1];
             end
-        end
-    endtask
-
-
-
-    task ss;
-        input  signed [31:0] in1;
-        begin
-            ss_tvalid <= 1;
-            ss_tdata  <= in1;
-            @(posedge axis_clk);
-            while (!ss_tready) begin
-                @(posedge axis_clk);
+            shift[0] <= data_Do;
+        end 
+    end
+end
+always @(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) begin
+        cur_data <= 'd0;
+        prev_sum <= 'd0;
+        cur_coef <= 'd0;
+    end
+    else begin
+        case (cur_state)
+            MAC : begin
+                cur_data <= shift[count];
+                prev_sum <= cur_sum;
+                cur_coef <= coef[count];
             end
-        end
-    endtask
+            default: begin
+                cur_data <= 'd0;
+                prev_sum <= 'd0;
+                cur_coef <= 'd0;
+            end
+        endcase
+    end
+end
 
-    task sm;
-        input  signed [31:0] in2; // golden data
-        input         [31:0] pcnt; // pattern count
-        begin
-            sm_tready <= 1;
-            @(posedge axis_clk) ;
-            wait(sm_tvalid);
-            while(!sm_tvalid) @(posedge axis_clk);
-            if (sm_tdata != in2) begin
-                $display("[ERROR] [Pattern %d] Golden answer: %d, Your answer: %d", pcnt, in2, sm_tdata);
-                error <= 1;
-            end
-            else begin
-                $display("[PASS] [Pattern %d] Golden answer: %d, Your answer: %d", pcnt, in2, sm_tdata);
-            end
-            @(posedge axis_clk);
+assign sm_tvalid = ((cur_state == MAC) && (count == 'd11)) & sm_tready; 
+reg [(pDATA_WIDTH-1):0] sm_tdata_reg;
+always @(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) sm_tdata_reg <= 'd0;
+    else sm_tdata_reg <= (sm_tvalid)? cur_sum : sm_tdata_reg;
+end
+assign sm_tdata = sm_tdata_reg;
+
+
+always @(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) output_count <= 'd0;
+    else begin
+        if(sm_tvalid) begin
+            if(output_count <= data_length - 1) output_count <= output_count + 1'b1;
+            else output_count <= output_count;
         end
-    endtask
+    end
+    
+end
+assign sm_tlast = (cur_state != IDLE) & (output_count == data_length);
+
+reg ap_start_flag;
+always@(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) ap_start_flag <= 1'b0;
+    else begin
+        if(awaddr == 12'h00) ap_start_flag <= 1'b1;
+    end
+end
+
+always@(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) ap_start <= 1'b0;
+    else begin
+        if(awaddr == 12'h00 && ~ap_start_flag) ap_start <= 1'b1;
+        else ap_start <= 1'b0;
+    end
+end
+
+always@(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) ap_done <= 1'b0;
+    else begin
+        if (output_count == data_length & cur_state != IDLE) ap_done <= 1'b1;
+        else ap_done <= ap_done;
+    end
+end
+
+always@(posedge axis_clk or negedge axis_rst_n) begin
+    if(~axis_rst_n) ap_idle <= 1'b1;
+    else begin
+        if (output_count == data_length) ap_idle <= 1'b1;
+        else if (ap_start) ap_idle <= 1'b0;
+        else ap_idle <= ap_idle;
+    end
+end
+
+always@* begin
+    ap_signal[31:0] = {29'b0, ap_idle, ap_done, ap_start};
+end
 endmodule
