@@ -1,7 +1,7 @@
 Copyright 1986-2022 Xilinx, Inc. All Rights Reserved.
 -------------------------------------------------------------------------------------------------
 | Tool Version : Vivado v.2022.1 (lin64) Build 3526262 Mon Apr 18 15:47:01 MDT 2022
-| Date         : Sat Oct 14 03:39:36 2023
+| Date         : Sun Oct 15 11:59:42 2023
 | Host         : ubuntu2004 running 64-bit Ubuntu 20.04.4 LTS
 | Command      : report_utilization -file fir_utilization_synth.rpt -pb fir_utilization_synth.pb
 | Design       : fir
@@ -31,8 +31,8 @@ Table of Contents
 +-------------------------+------+-------+------------+-----------+-------+
 |        Site Type        | Used | Fixed | Prohibited | Available | Util% |
 +-------------------------+------+-------+------------+-----------+-------+
-| Slice LUTs*             |  487 |     0 |          0 |     53200 |  0.92 |
-|   LUT as Logic          |  487 |     0 |          0 |     53200 |  0.92 |
+| Slice LUTs*             |  516 |     0 |          0 |     53200 |  0.97 |
+|   LUT as Logic          |  516 |     0 |          0 |     53200 |  0.97 |
 |   LUT as Memory         |    0 |     0 |          0 |     17400 |  0.00 |
 | Slice Registers         |  887 |     0 |          0 |    106400 |  0.83 |
 |   Register as Flip Flop |  887 |     0 |          0 |    106400 |  0.83 |
@@ -149,11 +149,11 @@ Table of Contents
 | Ref Name | Used | Functional Category |
 +----------+------+---------------------+
 | FDCE     |  886 |        Flop & Latch |
-| LUT6     |  213 |                 LUT |
+| LUT6     |  243 |                 LUT |
 | LUT3     |  180 |                 LUT |
 | OBUF     |  169 |                  IO |
 | IBUF     |  161 |                  IO |
-| LUT2     |  116 |                 LUT |
+| LUT2     |   86 |                 LUT |
 | LUT5     |   47 |                 LUT |
 | LUT4     |   33 |                 LUT |
 | CARRY4   |   30 |          CarryLogic |
